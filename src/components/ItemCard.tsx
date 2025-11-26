@@ -102,18 +102,21 @@ export function ItemCard({ object }: ItemCardProps) {
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const response = await fetch("/api/objects/signed-get", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-              },
-              body: JSON.stringify({ key: object.Key }),
-              signal: controller.signal,
-            });
-            if (!response.ok) throw new Error("failed");
-            const data = (await response.json()) as { url?: string };
-            if (!aborted) setImageUrl(data.url ?? null);
+            // const response = await fetch("/api/objects/signed-get", {
+            //   method: "POST",
+            //   headers: {
+            //     "Content-Type": "application/json",
+            //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+            //   },
+            //   body: JSON.stringify({ key: object.Key }),
+            //   signal: controller.signal,
+            // });
+            // if (!response.ok) throw new Error("failed");
+            // const data = (await response.json()) as { url?: string };
+            // if (!aborted) setImageUrl(data.url ?? null);
+
+            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+            setImageUrl(link ?? null);
           }
         }
 
@@ -130,6 +133,7 @@ export function ItemCard({ object }: ItemCardProps) {
           if (!response.ok) throw new Error("failed");
           const data = (await response.json()) as { url?: string };
           if (!aborted) setVideoUrl(data.url ?? null);
+          
         }
       } catch (error) {
         if (!aborted) console.error("Failed to load preview:", error);
@@ -180,20 +184,28 @@ export function ItemCard({ object }: ItemCardProps) {
     // }
     // Fallback: try signed-get if /api/download didn't return a link
     try {
-      const alt = await fetch("/api/objects/signed-get", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-        },
-        body: JSON.stringify({ key: object.Key }),
-      });
-      const { url: signed } = (await alt.json()) as { url?: string };
-      if (signed) {
-        navigator.clipboard.writeText(signed);
+      // const alt = await fetch("/api/objects/signed-get", {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      //   },
+      //   body: JSON.stringify({ key: object.Key }),
+      // });
+      // const { url: signed } = (await alt.json()) as { url?: string };
+      // if (signed) {
+      //   navigator.clipboard.writeText(signed);
+      //   setCopied(true);
+      //   setTimeout(() => setCopied(false), 2000);
+      // }
+
+      const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+      if (link) {
+        navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
+
     } catch {}
   };
 

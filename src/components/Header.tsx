@@ -104,19 +104,24 @@ export function Header() {
 
         await fetchObjects();
 
-        // 4. Get signed link
-        const linkRes = await fetch("/api/objects/signed-get", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-          },
-          body: JSON.stringify({ key: keys[0] }),
-        });
-        if (!linkRes.ok) throw new Error("failed");
+        // // 4. Get signed link
+        // const linkRes = await fetch("/api/objects/signed-get", {
+        //   method: "POST",
+        //   headers: {
+        //     "Content-Type": "application/json",
+        //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        //   },
+        //   body: JSON.stringify({ key: keys[0] }),
+        // });
+        // if (!linkRes.ok) throw new Error("failed");
 
-        const data = (await linkRes.json()) as { url?: string };
-        const links = data.url ? [data.url] : [];
+
+        // CLOUDFLARE_BUCKET_URL_PUBLIC
+        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
+
+
+        // const data = (await linkRes.json()) as { url?: string };
+        const links = link ? [link] : [];
         showLinksModal(links);
       } catch (err) {
         console.error(err);
@@ -135,7 +140,7 @@ export function Header() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-gray-800">
-              Media Gallery
+            File Exprodes
             </h1>
             <div
               className="text-sm text-gray-500 truncate"

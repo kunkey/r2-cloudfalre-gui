@@ -1,16 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const { password } = await req.json();
+  // khai báo kiểu cho dữ liệu nhận vào
+  const body = (await req.json()) as { password: string };
+  const { password } = body;
 
   if (password === process.env.APP_PASSWORD) {
-    const res = NextResponse.json({ ok: true });
-    res.cookies.set("site_auth", password, {
-      httpOnly: true,
-      path: "/",
-    });
-    return res;
+    return NextResponse.json({ ok: true });
+  } else {
+    return NextResponse.json({ ok: false }, { status: 401 });
   }
-
-  return NextResponse.json({ error: "Wrong password" }, { status: 401 });
 }

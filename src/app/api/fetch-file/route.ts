@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
     try {
-        const { url } = (await req.json()) as { url: string[] };
+        const { url } = (await req.json()) as { url: string };
         if (!url) {
             return NextResponse.json({ error: "URL is required" }, { status: 400 });
         }

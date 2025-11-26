@@ -3,7 +3,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* .npmrc* ./
-RUN npm ci --no-audit --no-fund
+RUN npm install
 
 FROM node:20-alpine AS builder
 WORKDIR /app

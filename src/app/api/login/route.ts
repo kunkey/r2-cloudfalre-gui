@@ -6,7 +6,18 @@ export async function POST(req: NextRequest) {
   const { password } = body;
 
   if (password === process.env.APP_PASSWORD) {
-    return NextResponse.json({ ok: true });
+    const res = NextResponse.json({ ok: true });
+
+    // Đặt cookie đăng nhập
+    res.cookies.set("site_auth", process.env.APP_PASSWORD, {
+      httpOnly: false, // ❗ cho phép JS delete
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 ngày
+      secure: true,     // bắt buộc HTTPS
+      sameSite: "strict"
+    });
+
+    return res;
   } else {
     return NextResponse.json({ ok: false }, { status: 401 });
   }

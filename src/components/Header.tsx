@@ -1,6 +1,6 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Upload, FolderPlus } from "lucide-react";
+import { Search, Upload, FolderPlus, LogOut } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import { Button } from "./ui/Button";
@@ -133,6 +133,12 @@ export function Header() {
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
   }, [currentPrefix]);
+
+
+  const logOut = () => {
+    document.cookie = "site_auth=; Max-Age=0; path=/;";
+    window.location.reload();
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-md border-b border-black/5">
@@ -273,7 +279,15 @@ export function Header() {
               <Upload className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Import URL
             </Button>
-
+            <Button
+              variant="secondary"
+              disabled={uploading}
+              onClick={() => logOut()}
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            >
+              <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              Sign Out
+            </Button>
             <div>
               <button
                 aria-label="Open search"

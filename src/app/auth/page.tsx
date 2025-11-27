@@ -18,7 +18,7 @@ export default function AuthPage() {
     if (res.ok) {
       window.location.href = "/";
     } else {
-      setError("Sai mật khẩu");
+      setError("Invalid Password!");
     }
   };
 
@@ -41,10 +41,16 @@ export default function AuthPage() {
         alignItems: "center",
         minWidth: 300
       }}>
-        <h2 style={{ color: "#fff", marginBottom: 20 }}>Đăng nhập</h2>
+        <h1 style={{ 
+              marginBottom: "20px",
+              color: "rgb(255, 255, 255)",
+              fontSize: "1.2rem",
+              fontWeight: 600,
+
+        }}>R2 Cloud Manager Gui</h1>
         <input
           type="password"
-          placeholder="Nhập mật khẩu"
+          placeholder="Enter Password"
           value={password}
           onChange={e => setPassword(e.target.value)}
           style={{
@@ -77,7 +83,7 @@ export default function AuthPage() {
           onMouseEnter={e => e.currentTarget.style.backgroundColor = "#42c85a"}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = "#4cd964"}
         >
-          Đăng nhập
+          Login
         </button>
         {error && <p style={{ color: "#ff6b6b", marginTop: 15 }}>{error}</p>}
       </div>

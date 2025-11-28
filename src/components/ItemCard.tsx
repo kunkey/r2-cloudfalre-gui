@@ -117,7 +117,7 @@ export function ItemCard({ object }: ItemCardProps) {
             // const data = (await response.json()) as { url?: string };
             // if (!aborted) setImageUrl(data.url ?? null);
 
-            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+            const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${object.Key}`;
             setImageUrl(link ?? null);
           }
         }
@@ -201,7 +201,7 @@ export function ItemCard({ object }: ItemCardProps) {
       //   setTimeout(() => setCopied(false), 2000);
       // }
 
-      const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+      const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${object.Key}`;
       if (link) {
         navigator.clipboard.writeText(link);
         setCopied(true);

@@ -117,7 +117,7 @@ export function Header() {
 
 
         // CLOUDFLARE_BUCKET_URL_PUBLIC
-        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
+        const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${keys[0]}`
 
 
         // const data = (await linkRes.json()) as { url?: string };

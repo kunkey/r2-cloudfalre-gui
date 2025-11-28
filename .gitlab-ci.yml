@@ -1,36 +1,35 @@
 image: docker:latest
 
 services:
-    - docker:dind
+  - docker:dind
 
 stages:
-    - build
-    - deploy
+  - build
+  - deploy
 
 before_script:
-    # This command should now succeed, showing a newer client version
-    - docker version 
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - apk add --update curl && rm -rf /var/cache/apk/*
+  - docker version
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - apk add --update curl && rm -rf /var/cache/apk/*
 
 build:
-    stage: build
-    script:
-            # - 'curl -X POST ...' (Telegram notification - commented out)
-            - docker build --cache-from $CI_REGISTRY_IMAGE:latest --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
-            - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
-            - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
-            - docker push $CI_REGISTRY_IMAGE:latest
-            # - 'curl -X POST ...' (Telegram notification - commented out)
-    only:
-            - develop
+  stage: build
+  script:
+    - docker build \
+        --build-arg NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC="$NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC" \
+        --cache-from $CI_REGISTRY_IMAGE:latest \
+        --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - develop
 
 deploy:
-    stage: deploy
-    variables:
-            GIT_STRATEGY: none
-    script:
-            - curl -XPOST $WWW_WEBHOO
-            # - 'curl -X POST ...' (Telegram notification - commented out)
-    only:
-            - develop
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - curl -XPOST $WWW_WEBHOO
+  only:
+    - develop

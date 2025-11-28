@@ -13,6 +13,7 @@ interface ItemCardProps {
 }
 
 export function ItemCard({ object }: ItemCardProps) {
+
   const [copied, setCopied] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isImage, setIsImage] = useState(false);
@@ -27,6 +28,7 @@ export function ItemCard({ object }: ItemCardProps) {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+
     const el = visibleRef.current;
     if (!el) return;
     const io = new IntersectionObserver(

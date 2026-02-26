@@ -6,11 +6,11 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { ItemCard } from './ItemCard';
 import FolderCard from './FolderCard';
 import { Button } from './ui/Button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { traverseDataTransferItems } from '@/lib/dnd';
 
 export function GalleryGrid() {
-  const { objects, prefixes, fetchObjects, searchQuery, currentPrefix, startDnDUpload } = useObjectStore();
+  const { objects, prefixes, fetchObjects, searchQuery, currentPrefix, startDnDUpload, isLoading, viewMode, sortOrder } = useObjectStore();
   const { loadMoreObjects } = useObjectStore.getState() as any;
   const [dragOver, setDragOver] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
@@ -80,16 +80,25 @@ export function GalleryGrid() {
     const q = (searchQuery || '').toLowerCase();
   
     // Loại bỏ thư mục: Key kết thúc "/"
-    const filesOnly = objects.filter((o: any) => {
+    let filesOnly = objects.filter((o: any) => {
       return !o.Key.endsWith('/');
     });
   
-    if (!q) return filesOnly;
-  
-    return filesOnly.filter((o: any) =>
-      (o.Key || '').toLowerCase().includes(q)
-    );
-  }, [objects, searchQuery]);
+    if (q) {
+      filesOnly = filesOnly.filter((o: any) =>
+        (o.Key || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Sort theo LastModified (R2/S3 không hỗ trợ sort phía server, sort client-side)
+    const sorted = [...filesOnly].sort((a: any, b: any) => {
+      const dateA = a.LastModified ? new Date(a.LastModified).getTime() : 0;
+      const dateB = b.LastModified ? new Date(b.LastModified).getTime() : 0;
+      return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
+    return sorted;
+  }, [objects, searchQuery, sortOrder]);
   
 
   return (
@@ -119,16 +128,30 @@ export function GalleryGrid() {
           Drop to upload into {currentPrefix || '/'}
         </div>
       )}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+          <p className="text-sm text-gray-500">Đang tải thư mục...</p>
+        </div>
+      ) : viewMode === 'list' ? (
+      <div className="flex flex-col gap-2">
+      {prefixes.map((p) => (
+        <FolderCard key={p} prefix={p.replace(/^\/+/, '')} variant="list" />
+      ))}
+      {filtered.map((object: any) => (
+        <ItemCard key={object.Key} object={object} variant="list" />
+      ))}
+      </div>
+      ) : (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-      {/* Folders first */}
       {prefixes.map((p) => (
         <FolderCard key={p} prefix={p.replace(/^\/+/, '')} />
       ))}
-      {/* Files */}
       {filtered.map((object: any) => (
         <ItemCard key={object.Key} object={object} />
       ))}
       </div>
+      )}
       <div ref={sentinelRef} className="h-10"></div>
     </div>
     </>

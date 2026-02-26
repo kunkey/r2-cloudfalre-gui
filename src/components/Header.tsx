@@ -1,6 +1,6 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Upload, FolderPlus, LogOut } from "lucide-react";
+import { Search, Upload, FolderPlus, LogOut, LayoutGrid, List, ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import { Button } from "./ui/Button";
@@ -17,6 +17,10 @@ export function Header() {
     currentPrefix,
     createFolder,
     addFolderPickerUploads,
+    viewMode,
+    setViewMode,
+    sortOrder,
+    setSortOrder,
   } = useObjectStore();
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -117,7 +121,7 @@ export function Header() {
 
 
         // CLOUDFLARE_BUCKET_URL_PUBLIC
-        const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${keys[0]}`
+        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
 
 
         // const data = (await linkRes.json()) as { url?: string };
@@ -288,7 +292,55 @@ export function Header() {
               <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Sign Out
             </Button>
-            <div>
+            <div className="flex items-center gap-1">
+              <button
+                aria-label="Mới nhất"
+                onClick={() => setSortOrder("newest")}
+                className={`p-2 rounded-lg transition ${
+                  sortOrder === "newest"
+                    ? "bg-amber-100 text-amber-600"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                }`}
+                title="Mới nhất (theo thời gian)"
+              >
+                <ArrowUpAZ className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="Cũ nhất"
+                onClick={() => setSortOrder("oldest")}
+                className={`p-2 rounded-lg transition ${
+                  sortOrder === "oldest"
+                    ? "bg-amber-100 text-amber-600"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                }`}
+                title="Cũ nhất (theo thời gian)"
+              >
+                <ArrowDownAZ className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="Grid view"
+                onClick={() => setViewMode("grid")}
+                className={`p-2 rounded-lg transition ${
+                  viewMode === "grid"
+                    ? "bg-amber-100 text-amber-600"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                }`}
+                title="Grid view"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="List view"
+                onClick={() => setViewMode("list")}
+                className={`p-2 rounded-lg transition ${
+                  viewMode === "list"
+                    ? "bg-amber-100 text-amber-600"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                }`}
+                title="List view"
+              >
+                <List className="w-5 h-5" />
+              </button>
               <button
                 aria-label="Open search"
                 onClick={() => setOpen((v) => !v)}

@@ -3,16 +3,17 @@
 import { useState, useEffect, useRef } from "react";
 import { Toast } from "./ui/Toast";
 import { Card, CardContent, CardFooter } from "./ui/Card";
-import { Link2, Download, Trash2 } from "lucide-react";
+import { Link2, Download, Trash2, Loader2 } from "lucide-react";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import moment from "moment";
 import { filesize } from "filesize";
 
 interface ItemCardProps {
   object: any;
+  variant?: 'grid' | 'list';
 }
 
-export function ItemCard({ object }: ItemCardProps) {
+export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
 
   const [copied, setCopied] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -117,7 +118,7 @@ export function ItemCard({ object }: ItemCardProps) {
             // const data = (await response.json()) as { url?: string };
             // if (!aborted) setImageUrl(data.url ?? null);
 
-            const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${object.Key}`;
+            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
             setImageUrl(link ?? null);
           }
         }
@@ -201,7 +202,7 @@ export function ItemCard({ object }: ItemCardProps) {
       //   setTimeout(() => setCopied(false), 2000);
       // }
 
-      const link = `https://pub-79278e4c6b7a447b8bcb95e837a6e1d6.r2.dev/${object.Key}`;
+      const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
       if (link) {
         navigator.clipboard.writeText(link);
         setCopied(true);
@@ -275,9 +276,13 @@ export function ItemCard({ object }: ItemCardProps) {
     setTimeout(() => setIsFocused(false), 200);
   };
 
-  const renderPreview = () => {
+  const renderPreview = (compact?: boolean) => {
     if (isLoading) {
-      return <div className="text-sm text-gray-400">Loading...</div>;
+      return compact ? (
+        <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+      ) : (
+        <div className="text-sm text-gray-400">Loading...</div>
+      );
     }
 
     if (isImage && imageUrl) {
@@ -320,6 +325,119 @@ export function ItemCard({ object }: ItemCardProps) {
 
     return <div className="text-sm text-gray-400">No preview</div>;
   };
+
+  const listRow = (
+    <Card
+      className={`flex flex-row items-center gap-3 cursor-pointer select-none hover:bg-gray-50 transition-colors ${
+        isSelected ? "ring-2 ring-blue-500" : ""
+      }`}
+      onClick={() => openFocus()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        toggleSelect(object.Key);
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          openFocus();
+        } else if (e.key === " ") {
+          e.preventDefault();
+          toggleSelect(object.Key);
+        }
+      }}
+    >
+      <CardContent className="flex flex-row items-center gap-3 w-full py-3 px-4">
+        <div
+          className="w-12 h-12 shrink-0 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-black/5"
+          ref={visibleRef}
+        >
+          {renderPreview(true)}
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <p className="text-sm font-medium truncate text-gray-800 select-text">
+            {object.Key?.split("/").pop() || object.Key}
+          </p>
+          <p className="text-xs text-gray-500">
+            {object?.LastModified ? moment(object.LastModified).format("MM/DD/YYYY HH:mm") : ""} • {filesize(object.Size)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => { e.stopPropagation(); copyLink(); }}
+            className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
+            title="Copy Link"
+          >
+            <Link2 className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadFile(); }}
+            className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
+            title="Download"
+          >
+            <Download className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); deleteFile(); }}
+            className="p-2 rounded-md hover:bg-red-100/70 transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4 text-red-500" />
+          </button>
+        </div>
+      </CardContent>
+      <Toast message="Link Copied!" show={copied} />
+    </Card>
+  );
+
+  if (variant === 'list') {
+    return (
+      <>
+        {listRow}
+        {isFocused && (
+          <div
+            className={`fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 ${
+              isFocusVisible ? "opacity-100" : "opacity-0"
+            }`}
+            onClick={closeFocus}
+          >
+            <div
+              className={`max-w-5xl w-full max-h-[85vh] bg-white rounded-xl overflow-hidden shadow-xl transform transition-transform duration-200 ${
+                isFocusVisible ? "scale-100" : "scale-95"
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full h-[70vh] bg-black flex items-center justify-center">
+                {isImage && imageUrl && (
+                  <img
+                    src={imageUrl}
+                    alt={object.Key}
+                    className="w-full h-full object-contain"
+                    loading="eager"
+                    decoding="async"
+                  />
+                )}
+                {isVideo && (
+                  <video
+                    src={videoUrl || ""}
+                    className="w-full h-full object-contain"
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                  />
+                )}
+                {!imageUrl && !isVideo && (
+                  <div className="text-white/80">Loading...</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <>

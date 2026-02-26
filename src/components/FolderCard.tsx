@@ -6,9 +6,10 @@ import { useObjectStore } from "@/hooks/useObjectStore";
 
 interface FolderCardProps {
   prefix: string; // e.g. photos/ or photos/2024/
+  variant?: 'grid' | 'list';
 }
 
-export default function FolderCard({ prefix }: FolderCardProps) {
+export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps) {
   const { setCurrentPrefix, selectedKeys, toggleSelect, deleteOne } = useObjectStore();
 
   const name = (() => {
@@ -34,6 +35,32 @@ export default function FolderCard({ prefix }: FolderCardProps) {
   const deleteFile = async (Key:string) => {
     await deleteOne(Key);
   };
+
+  if (variant === 'list') {
+    return (
+      <Card
+        className="flex flex-row items-center gap-3 cursor-pointer select-none hover:bg-amber-50/50 transition-colors"
+        onClick={open}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
+        }}
+      >
+        <CardContent className="flex flex-row items-center gap-3 w-full py-3 px-4">
+          <div className="w-10 h-10 shrink-0 bg-amber-50 rounded-lg flex items-center justify-center border border-black/5">
+            <Folder className="w-5 h-5 text-amber-500" />
+          </div>
+          <p className="text-sm font-medium truncate flex-1 text-gray-800 select-text">
+            {name}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card

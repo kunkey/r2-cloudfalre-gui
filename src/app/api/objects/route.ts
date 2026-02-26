@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   const data = await listObjects(prefix, continuationToken, maxKeys);
 
-  console.log('API route /api/objects GET handler - data:', data);
+  // console.log('API route /api/objects GET handler - data:', data);
 
   return NextResponse.json(data);
 }

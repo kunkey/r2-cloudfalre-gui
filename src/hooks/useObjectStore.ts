@@ -22,6 +22,10 @@ interface ObjectState {
   setSearchQuery: (q: string) => void;
   setGridLimit: (n: number) => void;
   setCurrentPrefix: (p: string) => void;
+  viewMode: 'grid' | 'list';
+  setViewMode: (m: 'grid' | 'list') => void;
+  sortOrder: 'newest' | 'oldest';
+  setSortOrder: (o: 'newest' | 'oldest') => void;
   goUp: () => void;
   createFolder: (name: string) => Promise<void>;
   // Upload management
@@ -60,6 +64,8 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   uploadTasks: [],
   linksModalOpen: false,
   modalLinks: [],
+  viewMode: 'grid',
+  sortOrder: 'newest',
   isLoading: false,
   isLoadingMore: false,
   hasMore: false,
@@ -116,6 +122,8 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   setSearchQuery: (q: string) => set({ searchQuery: q }),
   setGridLimit: (n: number) => set({ gridLimit: n }),
   setCurrentPrefix: (p: string) => set({ currentPrefix: p.replace(/^\/+|\/+$/g, '') ? p.replace(/^\/+|\/+$/g, '') + '/' : '' }),
+  setViewMode: (m: 'grid' | 'list') => set({ viewMode: m }),
+  setSortOrder: (o: 'newest' | 'oldest') => set({ sortOrder: o }),
   goUp: () => {
     const cur = get().currentPrefix;
     if (!cur) return;

@@ -1,14 +1,16 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Upload, FolderPlus } from "lucide-react";
+import { Search, Upload, FolderPlus, LogOut, LayoutGrid, List, ArrowDownAZ, ArrowUpAZ, Sun, Moon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import { Button } from "./ui/Button";
 import BulkLinksModal from "./BulkLinksModal";
 import { filesFromDirectoryInput } from "@/lib/dnd";
 import UrlImportModal from "./UrlImportModal";
+import { useTheme } from "./ThemeProvider";
 
 export function Header() {
+  const { theme, toggleTheme } = useTheme();
   const {
     searchQuery,
     setSearchQuery,
@@ -17,6 +19,10 @@ export function Header() {
     currentPrefix,
     createFolder,
     addFolderPickerUploads,
+    viewMode,
+    setViewMode,
+    sortOrder,
+    setSortOrder,
   } = useObjectStore();
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -104,19 +110,24 @@ export function Header() {
 
         await fetchObjects();
 
-        // 4. Get signed link
-        const linkRes = await fetch("/api/objects/signed-get", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-          },
-          body: JSON.stringify({ key: keys[0] }),
-        });
-        if (!linkRes.ok) throw new Error("failed");
+        // // 4. Get signed link
+        // const linkRes = await fetch("/api/objects/signed-get", {
+        //   method: "POST",
+        //   headers: {
+        //     "Content-Type": "application/json",
+        //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        //   },
+        //   body: JSON.stringify({ key: keys[0] }),
+        // });
+        // if (!linkRes.ok) throw new Error("failed");
 
-        const data = (await linkRes.json()) as { url?: string };
-        const links = data.url ? [data.url] : [];
+
+        // CLOUDFLARE_BUCKET_URL_PUBLIC
+        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
+
+
+        // const data = (await linkRes.json()) as { url?: string };
+        const links = link ? [link] : [];
         showLinksModal(links);
       } catch (err) {
         console.error(err);
@@ -129,20 +140,26 @@ export function Header() {
     return () => window.removeEventListener("paste", handlePaste);
   }, [currentPrefix]);
 
+
+  const logOut = () => {
+    document.cookie = "site_auth=; Max-Age=0; path=/;";
+    window.location.reload();
+  }
+
   return (
-    <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-md border-b border-black/5">
+    <header className="sticky top-0 z-40 bg-white/70 dark:bg-gray-900/80 backdrop-blur-md border-b border-black/5 dark:border-white/10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-gray-800">
-              Media Gallery
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-gray-800 dark:text-gray-100">
+            R2 CLOUDFLARE
             </h1>
-            <div
-              className="text-sm text-gray-500 truncate"
+            {/* <div
+              className="text-sm text-gray-500 dark:text-gray-400 truncate"
               title={currentPrefix || "/"}
             >
               {currentPrefix || "/"}
-            </div>
+            </div> */}
           </div>
           <div className="flex items-center gap-3">
             <input
@@ -237,7 +254,7 @@ export function Header() {
                   console.error(e);
                 }
               }}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
               title="Create Folder"
             >
               <FolderPlus className="w-4 h-4" /> New Folder
@@ -245,7 +262,7 @@ export function Header() {
             <Button
               variant="secondary"
               onClick={() => folderInputRef.current?.click()}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
               title="Upload Folder"
             >
               <Upload className="w-4 h-4" /> Upload Folder
@@ -254,7 +271,7 @@ export function Header() {
               variant="secondary"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
             >
               <Upload className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               {uploading ? "Uploading…" : "Upload File"}
@@ -263,20 +280,84 @@ export function Header() {
               variant="secondary"
               disabled={uploading}
               onClick={() => setUrlModalOpen(true)}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
             >
               <Upload className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Import URL
             </Button>
-
-            <div>
+            <Button
+              variant="secondary"
+              disabled={uploading}
+              onClick={() => logOut()}
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              Sign Out
+            </Button>
+            <div className="flex items-center gap-1">
+              <button
+                aria-label="Mới nhất"
+                onClick={() => setSortOrder("newest")}
+                className={`p-2 rounded-lg transition cursor-pointer ${
+                  sortOrder === "newest"
+                    ? "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400"
+                    : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+                title="Mới nhất (theo thời gian)"
+              >
+                <ArrowUpAZ className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="Cũ nhất"
+                onClick={() => setSortOrder("oldest")}
+                className={`p-2 rounded-lg transition cursor-pointer ${
+                  sortOrder === "oldest"
+                    ? "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400"
+                    : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+                title="Cũ nhất (theo thời gian)"
+              >
+                <ArrowDownAZ className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="Grid view"
+                onClick={() => setViewMode("grid")}
+                className={`p-2 rounded-lg transition cursor-pointer ${
+                  viewMode === "grid"
+                    ? "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400"
+                    : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+                title="Grid view"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+              <button
+                aria-label="List view"
+                onClick={() => setViewMode("list")}
+                className={`p-2 rounded-lg transition cursor-pointer ${
+                  viewMode === "list"
+                    ? "bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400"
+                    : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+                title="List view"
+              >
+                <List className="w-5 h-5" />
+              </button>
+              <button
+                aria-label={theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'}
+                onClick={toggleTheme}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition cursor-pointer"
+                title={theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối'}
+              >
+                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
               <button
                 aria-label="Open search"
                 onClick={() => setOpen((v) => !v)}
-                className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition"
+                className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer"
                 ref={triggerRef}
               >
-                <Search className="w-5 h-5 text-gray-600" />
+                <Search className="w-5 h-5 text-gray-600 dark:text-gray-300" />
               </button>
             </div>
           </div>
@@ -291,8 +372,8 @@ export function Header() {
               className="mt-2 flex justify-end"
               ref={popoverRef}
             >
-              <div className="flex items-center gap-2 bg-white shadow-md border border-black/5 rounded-full pl-3 pr-2 py-1">
-                <Search className="w-4 h-4 text-gray-500" />
+              <div className="flex items-center gap-2 bg-white dark:bg-gray-800 shadow-md border border-black/5 dark:border-white/10 rounded-full pl-3 pr-2 py-1">
+                <Search className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 <input
                   ref={inputRef}
                   value={searchQuery}
@@ -307,7 +388,7 @@ export function Header() {
                     if (!inPopover && !inTrigger) setOpen(false);
                   }}
                   placeholder="Search..."
-                  className="w-56 bg-transparent outline-none text-sm text-gray-700 placeholder:text-gray-400"
+                  className="w-56 bg-transparent outline-none text-sm text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
             </motion.div>

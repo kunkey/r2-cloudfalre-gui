@@ -32,12 +32,12 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60" onClick={onClose} />
           <motion.div
             role="dialog"
             aria-modal="true"
             className={cn(
-              'relative z-10 w-[min(92vw,720px)] max-h-[90vh] flex flex-col rounded-2xl bg-white/80 backdrop-blur-2xl border border-black/10 shadow-xl',
+              'relative z-10 w-[min(92vw,720px)] max-h-[90vh] flex flex-col rounded-2xl bg-white/80 dark:bg-gray-800/90 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-xl',
               className
             )}
             initial={{ y: 24, opacity: 0 }}
@@ -47,19 +47,19 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
           >
             <div className="flex items-center justify-between px-5 pt-4 pb-3">
               {title && (
-                <h3 className="text-base font-semibold text-gray-800">{title}</h3>
+                <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
               )}
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="rounded-full p-2 hover:bg-black/5 transition"
+                className="rounded-full p-2 hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-800 dark:text-gray-200"
               >
                 <span className="sr-only">Close</span>
                 ×
               </button>
             </div>
-            <div className="px-5 pb-4 text-gray-800 flex-1 overflow-auto">{children}</div>
-            {footer && <div className="px-5 pt-3 pb-5 border-t border-black/5">{footer}</div>}
+            <div className="px-5 pb-4 text-gray-800 dark:text-gray-200 flex-1 overflow-auto">{children}</div>
+            {footer && <div className="px-5 pt-3 pb-5 border-t border-black/5 dark:border-white/10">{footer}</div>}
           </motion.div>
         </motion.div>
       )}

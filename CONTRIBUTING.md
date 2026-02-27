@@ -1,4 +1,4 @@
-# Contributing to R2 Gallery
+# Contributing to R2 CLOUDFLARE
 
 Thanks for taking the time to contribute!
 

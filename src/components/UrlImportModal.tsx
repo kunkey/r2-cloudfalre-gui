@@ -21,7 +21,7 @@ export default function UrlImportModal({
   return (
     <Modal open={open} onClose={onClose} title="Import file from URL">
       <input
-        className="w-full border px-3 py-2 rounded mb-4"
+        className="w-full border border-black/10 dark:border-white/20 px-3 py-2 rounded mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
         placeholder="Paste file URL here..."
         value={url}
         onChange={(e) => setUrl(e.target.value)}

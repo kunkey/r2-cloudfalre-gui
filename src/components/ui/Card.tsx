@@ -7,8 +7,8 @@ function Card({ className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-black/5 bg-white/70 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.06)]',
-        'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(0,0,0,0.1)]',
+        'rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-gray-800/70 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.3)]',
+        'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)]',
         className
       )}
       {...props}

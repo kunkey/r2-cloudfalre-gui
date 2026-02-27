@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4: dùng class .dark thay vì prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -23,6 +26,28 @@
     --ring: 215 20.2% 65.1%;
     --radius: 0.75rem;
   }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 14%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+  }
 }
 
 @layer utilities {
@@ -31,4 +56,60 @@
   }
 }
 
+/* Scrollbar tùy chỉnh: nhỏ gọn, hòa màu */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(107 114 128 / 0.5) transparent;
+}
 
+.dark * {
+  scrollbar-color: rgb(75 85 99 / 0.6) transparent;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(107 114 128 / 0.4);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(107 114 128 / 0.6);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: rgb(75 85 99 / 0.5);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgb(75 85 99 / 0.7);
+}
+
+/* Upload progress: hiệu ứng sọc cuộn màu vàng khi đang upload */
+.upload-progress-stripes {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.25) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.25) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 20px 20px;
+  animation: upload-stripes 0.8s linear infinite;
+}
+
+@keyframes upload-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 20px 0; }
+}

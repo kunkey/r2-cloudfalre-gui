@@ -5,12 +5,12 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 
 import { ItemCard } from './ItemCard';
 import FolderCard from './FolderCard';
-import { Button } from './ui/Button';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Lightbox } from './Lightbox';
+import { Loader2 } from 'lucide-react';
 import { traverseDataTransferItems } from '@/lib/dnd';
 
 export function GalleryGrid() {
-  const { objects, prefixes, fetchObjects, searchQuery, currentPrefix, startDnDUpload, isLoading, viewMode, sortOrder } = useObjectStore();
+  const { objects, prefixes, fetchObjects, searchQuery, currentPrefix, startDnDUpload, isLoading, viewMode, sortOrder, setDisplayOrderedKeys, selectRange, toggleSelectAll, showOnlyUploaded, recentlyUploadedKeys } = useObjectStore();
   const { loadMoreObjects } = useObjectStore.getState() as any;
   const [dragOver, setDragOver] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
@@ -78,12 +78,18 @@ export function GalleryGrid() {
 
   const filtered = useMemo(() => {
     const q = (searchQuery || '').toLowerCase();
-  
+
     // Loại bỏ thư mục: Key kết thúc "/"
     let filesOnly = objects.filter((o: any) => {
       return !o.Key.endsWith('/');
     });
-  
+
+    // Chỉ hiển thị file vừa upload
+    if (showOnlyUploaded && recentlyUploadedKeys.length > 0) {
+      const keySet = new Set(recentlyUploadedKeys);
+      filesOnly = filesOnly.filter((o: any) => keySet.has(o.Key));
+    }
+
     if (q) {
       filesOnly = filesOnly.filter((o: any) =>
         (o.Key || '').toLowerCase().includes(q)
@@ -98,23 +104,30 @@ export function GalleryGrid() {
     });
 
     return sorted;
-  }, [objects, searchQuery, sortOrder]);
+  }, [objects, searchQuery, sortOrder, showOnlyUploaded, recentlyUploadedKeys]);
+
+  const orderedKeys = useMemo(() => filtered.map((o: any) => o.Key).filter(Boolean), [filtered]);
+
+  useEffect(() => {
+    setDisplayOrderedKeys(orderedKeys);
+  }, [orderedKeys, setDisplayOrderedKeys]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        e.preventDefault();
+        toggleSelectAll();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleSelectAll]);
   
 
   return (
     <>
-    {currentPrefix ? (
-      <div className="mb-4">
-        <Button
-          variant="outline"
-          onClick={() => { try { window.history.back(); } catch {} }}
-          className="gap-2"
-          title="Back"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </Button>
-      </div>
-    ) : null}
     <div
       id="grid-dropzone"
       onDragEnter={onDragEnter}
@@ -124,35 +137,36 @@ export function GalleryGrid() {
       className="relative"
     >
       {dragOver && (
-        <div className="absolute inset-0 z-10 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/70 flex items-center justify-center text-blue-700 font-medium">
+        <div className="absolute inset-0 z-10 rounded-xl border-2 border-dashed border-blue-400 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-900/30 flex items-center justify-center text-blue-700 dark:text-blue-300 font-medium">
           Drop to upload into {currentPrefix || '/'}
         </div>
       )}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
-          <p className="text-sm text-gray-500">Đang tải thư mục...</p>
+          <Loader2 className="w-12 h-12 text-amber-500 dark:text-amber-400 animate-spin" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">Đang tải thư mục...</p>
         </div>
       ) : viewMode === 'list' ? (
       <div className="flex flex-col gap-2">
-      {prefixes.map((p) => (
+      {!showOnlyUploaded && prefixes.map((p) => (
         <FolderCard key={p} prefix={p.replace(/^\/+/, '')} variant="list" />
       ))}
       {filtered.map((object: any) => (
-        <ItemCard key={object.Key} object={object} variant="list" />
+        <ItemCard key={object.Key} object={object} variant="list" orderedKeys={orderedKeys} onSelectRange={selectRange} />
       ))}
       </div>
       ) : (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-      {prefixes.map((p) => (
+      {!showOnlyUploaded && prefixes.map((p) => (
         <FolderCard key={p} prefix={p.replace(/^\/+/, '')} />
       ))}
       {filtered.map((object: any) => (
-        <ItemCard key={object.Key} object={object} />
+        <ItemCard key={object.Key} object={object} orderedKeys={orderedKeys} onSelectRange={selectRange} />
       ))}
       </div>
       )}
       <div ref={sentinelRef} className="h-10"></div>
+      <Lightbox orderedKeys={orderedKeys} objects={filtered} />
     </div>
     </>
   );

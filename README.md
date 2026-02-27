@@ -1,6 +1,6 @@
-# R2 Gallery
+# R2 CLOUDFLARE
 
-![R2 Gallery Demo](https://raw.githubusercontent.com/sjackp/r2-gallery/main/demos.gif)
+![R2 CLOUDFLARE Demo](https://raw.githubusercontent.com/sjackp/r2-gallery/main/demos.gif)
 
 
 A minimalist web UI to manage a Cloudflare R2 bucket. 

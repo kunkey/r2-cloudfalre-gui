@@ -12,12 +12,12 @@ export const s3Client = new S3Client({
   },
 });
 
-console.log('S3 Client Configured:', { 
-  region: process.env.CLOUDFLARE_REGION || 'auto',
-  endpoint: R2_ENDPOINT,
-  accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY ? 'Loaded' : 'Not Loaded',
-  secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY ? 'Loaded' : 'Not Loaded',
-});
+// console.log('S3 Client Configured:', { 
+//   region: process.env.CLOUDFLARE_REGION || 'auto',
+//   endpoint: R2_ENDPOINT,
+//   accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY ? 'Loaded' : 'Not Loaded',
+//   secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY ? 'Loaded' : 'Not Loaded',
+// });
 
 export async function listObjects(prefix?: string, continuationToken?: string, maxKeys?: number, useDelimiter: boolean = true) {
   const command = new ListObjectsV2Command({
@@ -28,11 +28,11 @@ export async function listObjects(prefix?: string, continuationToken?: string, m
     MaxKeys: maxKeys,
   });
 
-  console.log('Listing objects with prefix:', prefix, 'and continuation token:', continuationToken);
+  // console.log('Listing objects with prefix:', prefix, 'and continuation token:', continuationToken);
 
   try {
     const result = await s3Client.send(command);
-    console.log('Successfully listed objects:', result.Contents?.length || 0, 'objects found. Folders:', result.CommonPrefixes?.length || 0);
+    // console.log('Successfully listed objects:', result.Contents?.length || 0, 'objects found. Folders:', result.CommonPrefixes?.length || 0);
     return result;
   } catch (error) {
     console.error('Error listing objects:', error);
@@ -73,6 +73,54 @@ export async function deleteObjects(keys: string[]) {
   });
 
   return s3Client.send(command);
+}
+
+/** List all object keys under prefix (no delimiter = recursive). Used for folder delete. */
+async function listAllKeysByPrefix(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let token: string | undefined;
+  do {
+    const result = await listObjects(prefix, token, 1000, false);
+    const contents = (result as any).Contents || [];
+    for (const obj of contents) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    token = (result as any).NextContinuationToken;
+  } while (token);
+  return keys;
+}
+
+/** Get folder stats: object count and total size in bytes. */
+export async function getFolderStats(prefix: string): Promise<{ count: number; totalSize: number }> {
+  const normalized = prefix.replace(/\/+$/, '') ? prefix.replace(/\/+$/, '') + '/' : prefix;
+  let count = 0;
+  let totalSize = 0;
+  let token: string | undefined;
+  do {
+    const result = await listObjects(normalized, token, 1000, false);
+    const contents = (result as any).Contents || [];
+    for (const obj of contents) {
+      if (obj.Key) {
+        count++;
+        totalSize += Number(obj.Size) || 0;
+      }
+    }
+    token = (result as any).NextContinuationToken;
+  } while (token);
+  return { count, totalSize };
+}
+
+/** Delete all objects under prefix (folder). */
+export async function deleteFolderByPrefix(prefix: string): Promise<{ deleted: number }> {
+  const normalized = prefix.replace(/\/+$/, '') ? prefix.replace(/\/+$/, '') + '/' : prefix;
+  const keys = await listAllKeysByPrefix(normalized);
+  if (keys.length === 0) return { deleted: 0 };
+  const batchSize = 1000;
+  for (let i = 0; i < keys.length; i += batchSize) {
+    const batch = keys.slice(i, i + batchSize);
+    await deleteObjects(batch);
+  }
+  return { deleted: keys.length };
 }
 
 export async function copyObject(sourceKey: string, destinationKey: string) {

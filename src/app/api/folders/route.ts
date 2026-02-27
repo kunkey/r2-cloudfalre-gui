@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client } from '@/server/r2';
+import { s3Client, deleteFolderByPrefix } from '@/server/r2';
 
 // Create a zero-byte "folder" marker under parentPrefix
 export async function POST(request: NextRequest) {
@@ -10,8 +10,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing folder name' }, { status: 400 });
     }
 
-    // Basic normalization and validation
-    const cleanedParent = String(parentPrefix || '').replace(/^\/+|\/+/g, (m) => (m === '/' ? '' : '/'));
+    // Basic normalization: trim leading/trailing slashes, collapse multiple slashes
+    const cleanedParent = String(parentPrefix || '').replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
     const trimmed = name.trim().replace(/^\/+|\/+$/g, '');
     if (!trimmed) {
       return NextResponse.json({ error: 'Invalid folder name' }, { status: 400 });
@@ -35,6 +35,22 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Create folder failed:', error);
     return NextResponse.json({ error: error?.message || 'Failed to create folder' }, { status: 500 });
+  }
+}
+
+// Delete folder (all objects under prefix)
+export async function DELETE(request: NextRequest) {
+  try {
+    const { prefix } = (await request.json()) as { prefix: string };
+    if (!prefix || typeof prefix !== 'string') {
+      return NextResponse.json({ error: 'Missing prefix' }, { status: 400 });
+    }
+    const normalized = prefix.replace(/^\/+|\/+$/g, '') ? prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
+    const { deleted } = await deleteFolderByPrefix(normalized);
+    return NextResponse.json({ ok: true, deleted });
+  } catch (error: any) {
+    console.error('Delete folder failed:', error);
+    return NextResponse.json({ error: error?.message || 'Failed to delete folder' }, { status: 500 });
   }
 }
 

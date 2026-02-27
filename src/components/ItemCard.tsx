@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Toast } from "./ui/Toast";
 import { Card, CardContent, CardFooter } from "./ui/Card";
 import { Link2, Download, Trash2, Loader2 } from "lucide-react";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import moment from "moment";
 import { filesize } from "filesize";
@@ -11,9 +12,11 @@ import { filesize } from "filesize";
 interface ItemCardProps {
   object: any;
   variant?: 'grid' | 'list';
+  orderedKeys?: string[];
+  onSelectRange?: (orderedKeys: string[], endKey: string) => void;
 }
 
-export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
+export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectRange }: ItemCardProps) {
 
   const [copied, setCopied] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -21,15 +24,13 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFocused, setIsFocused] = useState(false);
-  const [isFocusVisible, setIsFocusVisible] = useState(false);
-  const { selectedKeys, toggleSelect, deleteOne } = useObjectStore();
+  const { selectedKeys, toggleSelectWithAnchor, deleteOne, setFocusedKey } = useObjectStore();
   const isSelected = selectedKeys.includes(object.Key);
   const visibleRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
-
     const el = visibleRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -76,8 +77,6 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
 
       const isImg = hasImageExtension || hasImageContentType;
       const isVid = hasVideoExtension || hasVideoContentType;
-      const LastModified = object?.LastModified || null;
-      const Size = object?.Size || 0;
 
       if (!(isImg || isVid)) {
         if (!aborted) setIsLoading(false);
@@ -105,19 +104,6 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            // const response = await fetch("/api/objects/signed-get", {
-            //   method: "POST",
-            //   headers: {
-            //     "Content-Type": "application/json",
-            //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-            //   },
-            //   body: JSON.stringify({ key: object.Key }),
-            //   signal: controller.signal,
-            // });
-            // if (!response.ok) throw new Error("failed");
-            // const data = (await response.json()) as { url?: string };
-            // if (!aborted) setImageUrl(data.url ?? null);
-
             const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
             setImageUrl(link ?? null);
           }
@@ -136,7 +122,6 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
           if (!response.ok) throw new Error("failed");
           const data = (await response.json()) as { url?: string };
           if (!aborted) setVideoUrl(data.url ?? null);
-          
         }
       } catch (error) {
         if (!aborted) console.error("Failed to load preview:", error);
@@ -156,59 +141,14 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
     };
   }, [object.Key, object.ContentType, isVisible]);
 
-  // Close focused view with Escape
-  useEffect(() => {
-    if (!isFocused) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        closeFocus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isFocused]);
-
   const copyLink = async () => {
-    // const res = await fetch('/api/download', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-    //   },
-    //   body: JSON.stringify({ keys: [object.Key] }),
-    // });
-    // const data = (await res.json()) as { links?: string[] };
-    // const url = Array.isArray(data?.links) ? data.links[0] : undefined;
-    // if (url) {
-    //   navigator.clipboard.writeText(url);
-    //   setCopied(true);
-    //   setTimeout(() => setCopied(false), 2000);
-    //   return;
-    // }
-    // Fallback: try signed-get if /api/download didn't return a link
     try {
-      // const alt = await fetch("/api/objects/signed-get", {
-      //   method: "POST",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //     Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      //   },
-      //   body: JSON.stringify({ key: object.Key }),
-      // });
-      // const { url: signed } = (await alt.json()) as { url?: string };
-      // if (signed) {
-      //   navigator.clipboard.writeText(signed);
-      //   setCopied(true);
-      //   setTimeout(() => setCopied(false), 2000);
-      // }
-
       const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
       if (link) {
         navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
-
     } catch {}
   };
 
@@ -261,19 +201,16 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
     }
   };
 
-  const deleteFile = async () => {
+  const deleteFile = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
     await deleteOne(object.Key);
   };
 
   const openFocus = () => {
-    setIsFocused(true);
-    // next tick to trigger transition
-    requestAnimationFrame(() => setIsFocusVisible(true));
-  };
-
-  const closeFocus = () => {
-    setIsFocusVisible(false);
-    setTimeout(() => setIsFocused(false), 200);
+    setFocusedKey(object.Key);
   };
 
   const renderPreview = (compact?: boolean) => {
@@ -301,22 +238,7 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
     }
 
     if (isVideo && videoUrl) {
-      if (isFocused) {
-        return (
-          <video
-            src={videoUrl}
-            className="max-h-full max-w-full object-contain rounded"
-            muted={true}
-            loop
-            autoPlay={false}
-            playsInline
-            preload="metadata"
-            onError={() => setVideoUrl(null)}
-          />
-        );
-      } else {
-        return <div className="text-sm text-black-400">Click To Preview</div>;
-      }
+      return <div className="text-sm text-black-400">Video</div>;
     }
 
     if (isVideo && !videoUrl) {
@@ -326,117 +248,88 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
     return <div className="text-sm text-gray-400">No preview</div>;
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (e.shiftKey && orderedKeys.length > 0 && onSelectRange) {
+      onSelectRange(orderedKeys, object.Key);
+    } else {
+      toggleSelectWithAnchor(object.Key);
+    }
+  };
+
   const listRow = (
-    <Card
-      className={`flex flex-row items-center gap-3 cursor-pointer select-none hover:bg-gray-50 transition-colors ${
-        isSelected ? "ring-2 ring-blue-500" : ""
-      }`}
-      onClick={() => openFocus()}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        toggleSelect(object.Key);
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          openFocus();
-        } else if (e.key === " ") {
-          e.preventDefault();
-          toggleSelect(object.Key);
-        }
-      }}
-    >
-      <CardContent className="flex flex-row items-center gap-3 w-full py-3 px-4">
-        <div
-          className="w-12 h-12 shrink-0 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-black/5"
-          ref={visibleRef}
-        >
-          {renderPreview(true)}
-        </div>
-        <div className="flex-1 min-w-0 flex flex-col">
-          <p className="text-sm font-medium truncate text-gray-800 select-text">
-            {object.Key?.split("/").pop() || object.Key}
-          </p>
-          <p className="text-xs text-gray-500">
-            {object?.LastModified ? moment(object.LastModified).format("MM/DD/YYYY HH:mm") : ""} • {filesize(object.Size)}
-          </p>
-        </div>
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={(e) => { e.stopPropagation(); copyLink(); }}
-            className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
-            title="Copy Link"
+    <>
+      <Card
+        className={`flex flex-row items-center gap-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+          isSelected ? "ring-2 ring-blue-500" : ""
+        }`}
+        onClick={() => openFocus()}
+        onContextMenu={handleContextMenu}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            openFocus();
+          } else if (e.key === " ") {
+            e.preventDefault();
+            toggleSelectWithAnchor(object.Key);
+          }
+        }}
+      >
+        <CardContent className="flex flex-row items-center gap-3 w-full py-3 px-4">
+          <div
+            className="w-12 h-12 shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
+            ref={visibleRef}
           >
-            <Link2 className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); downloadFile(); }}
-            className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
-            title="Download"
-          >
-            <Download className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); deleteFile(); }}
-            className="p-2 rounded-md hover:bg-red-100/70 transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </button>
-        </div>
-      </CardContent>
-      <Toast message="Link Copied!" show={copied} />
-    </Card>
+            {renderPreview(true)}
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <p className="text-sm font-medium truncate text-gray-800 dark:text-gray-200 select-text">
+              {object.Key?.split("/").pop() || object.Key}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {object?.LastModified ? moment(object.LastModified).format("MM/DD/YYYY HH:mm") : ""} • {filesize(object.Size)}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={(e) => { e.stopPropagation(); copyLink(); }}
+              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              title="Copy Link"
+            >
+              <Link2 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); downloadFile(); }}
+              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              title="Download"
+            >
+              <Download className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteFile(); }}
+              className="p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+            </button>
+          </div>
+        </CardContent>
+        <Toast message="Copied!" show={copied} />
+      </Card>
+      <ConfirmDeleteModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete file"
+        message={`Delete file "${object.Key?.split("/").pop() || object.Key}"? This action cannot be undone.`}
+      />
+    </>
   );
 
   if (variant === 'list') {
-    return (
-      <>
-        {listRow}
-        {isFocused && (
-          <div
-            className={`fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 ${
-              isFocusVisible ? "opacity-100" : "opacity-0"
-            }`}
-            onClick={closeFocus}
-          >
-            <div
-              className={`max-w-5xl w-full max-h-[85vh] bg-white rounded-xl overflow-hidden shadow-xl transform transition-transform duration-200 ${
-                isFocusVisible ? "scale-100" : "scale-95"
-              }`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="w-full h-[70vh] bg-black flex items-center justify-center">
-                {isImage && imageUrl && (
-                  <img
-                    src={imageUrl}
-                    alt={object.Key}
-                    className="w-full h-full object-contain"
-                    loading="eager"
-                    decoding="async"
-                  />
-                )}
-                {isVideo && (
-                  <video
-                    src={videoUrl || ""}
-                    className="w-full h-full object-contain"
-                    controls
-                    autoPlay
-                    playsInline
-                    preload="metadata"
-                  />
-                )}
-                {!imageUrl && !isVideo && (
-                  <div className="text-white/80">Loading...</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    );
+    return <>{listRow}</>;
   }
 
   return (
@@ -446,10 +339,7 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
           isSelected ? "ring-2 ring-blue-500" : ""
         }`}
         onClick={() => openFocus()}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          toggleSelect(object.Key);
-        }}
+        onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
@@ -458,39 +348,23 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
             openFocus();
           } else if (e.key === " ") {
             e.preventDefault();
-            toggleSelect(object.Key);
+            toggleSelectWithAnchor(object.Key);
           }
         }}
       >
         <CardContent className="flex flex-col items-center justify-center relative">
           <div
-            className="w-full h-44 bg-gray-100 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-black/5"
+            className="w-full h-44 bg-gray-100 dark:bg-gray-700 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
             ref={visibleRef}
           >
             {renderPreview()}
           </div>
           <p
-            className="text-sm font-medium truncate w-full text-left text-gray-800 select-text mb-2"
+            className="text-sm font-medium truncate w-full text-center text-gray-800 dark:text-gray-200 select-text"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {object.Key}
-          </p>
-          <p
-            className="text-sm font-medium truncate w-full text-left text-gray-800 select-text"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{color: "#6e6e6e"}}
-          >
-            Time: {object?.LastModified ? moment(object.LastModified).format("MM/DD/YYYY HH:mm:ss"): ""}
-          </p>
-          <p
-            className="text-sm font-medium truncate w-full text-left text-gray-800 select-text"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{color: "#6e6e6e"}}
-          >
-            Size: {filesize(object.Size)}
+            {object.Key?.split("/").pop() || object.Key}
           </p>
         </CardContent>
         <CardFooter className="pt-0">
@@ -500,83 +374,42 @@ export function ItemCard({ object, variant = 'grid' }: ItemCardProps) {
                 e.stopPropagation();
                 copyLink();
               }}
-              className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
+              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Copy Link"
             >
-              <Link2 className="w-4 h-4 text-gray-600" />
+              <Link2 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 downloadFile();
               }}
-              className="p-2 rounded-md hover:bg-gray-200/70 transition-colors"
+              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Download"
             >
-              <Download className="w-4 h-4 text-gray-600" />
+              <Download className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 deleteFile();
               }}
-              className="p-2 rounded-md hover:bg-red-100/70 transition-colors"
+              className="p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
               title="Delete"
             >
               <Trash2 className="w-4 h-4 text-red-500" />
             </button>
           </div>
         </CardFooter>
-        <Toast message="Link Copied!" show={copied} />
+        <Toast message="Copied!" show={copied} />
       </Card>
-      {isFocused && (
-        <div
-          className={`fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 ${
-            isFocusVisible ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={closeFocus}
-        >
-          <div
-            className={`max-w-5xl w-full max-h-[85vh] bg-white rounded-xl overflow-hidden shadow-xl transform transition-transform duration-200 ${
-              isFocusVisible ? "scale-100" : "scale-95"
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full h-[70vh] bg-black flex items-center justify-center">
-              {isImage && imageUrl && (
-                <img
-                  src={imageUrl}
-                  alt={object.Key}
-                  className="w-full h-full object-contain"
-                  loading="eager"
-                  decoding="async"
-                />
-              )}
-              {isVideo && (
-                <video
-                  src={videoUrl || ""}
-                  className="w-full h-full object-contain"
-                  controls
-                  autoPlay
-                  playsInline
-                  preload="metadata"
-                  onCanPlay={() => {
-                    if (!videoUrl) {
-                      /* no-op */
-                    }
-                  }}
-                  onError={() => {
-                    /* swallow */
-                  }}
-                />
-              )}
-              {!imageUrl && !isVideo && (
-                <div className="text-white/80">Loading...</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete file"
+        message={`Delete file "${object.Key?.split("/").pop() || object.Key}"? This action cannot be undone.`}
+      />
     </>
   );
 }

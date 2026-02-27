@@ -13,10 +13,17 @@ interface ObjectState {
   isLoadingMore: boolean;
   hasMore: boolean;
   toggleSelect: (key: string) => void;
+  toggleSelectWithAnchor: (key: string) => void;
+  selectRange: (orderedKeys: string[], endKey: string) => void;
+  toggleSelectAll: (orderedKeys?: string[]) => void;
   clearSelection: () => void;
-  selectAll: () => void;
+  selectAll: (orderedKeys?: string[]) => void;
+  lastSelectedKey: string | null;
+  displayOrderedKeys: string[];
+  setDisplayOrderedKeys: (keys: string[]) => void;
   bulkDelete: () => Promise<void>;
   deleteOne: (key: string) => Promise<void>;
+  deleteFolder: (prefix: string) => Promise<void>;
   bulkDownload: () => Promise<void>;
   bulkCopyLinks: () => Promise<void>;
   setSearchQuery: (q: string) => void;
@@ -41,6 +48,13 @@ interface ObjectState {
   modalLinks: string[];
   showLinksModal: (links: string[]) => void;
   hideLinksModal: () => void;
+  // Lightbox (file preview)
+  focusedKey: string | null;
+  setFocusedKey: (key: string | null) => void;
+  // Filter: chỉ hiển thị file vừa upload
+  recentlyUploadedKeys: string[];
+  showOnlyUploaded: boolean;
+  setShowOnlyUploaded: (v: boolean) => void;
 }
 
 export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error' | 'canceled';
@@ -57,6 +71,8 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   objects: [],
   prefixes: [],
   selectedKeys: [],
+  lastSelectedKey: null,
+  displayOrderedKeys: [],
   searchQuery: '',
   gridLimit: 96,
   currentPrefix: '',
@@ -64,6 +80,11 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   uploadTasks: [],
   linksModalOpen: false,
   modalLinks: [],
+  focusedKey: null,
+  setFocusedKey: (key) => set({ focusedKey: key }),
+  recentlyUploadedKeys: [],
+  showOnlyUploaded: false,
+  setShowOnlyUploaded: (v) => set({ showOnlyUploaded: v, ...(!v ? { recentlyUploadedKeys: [] } : {}) }),
   viewMode: 'grid',
   sortOrder: 'newest',
   isLoading: false,
@@ -121,7 +142,10 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
 
   setSearchQuery: (q: string) => set({ searchQuery: q }),
   setGridLimit: (n: number) => set({ gridLimit: n }),
-  setCurrentPrefix: (p: string) => set({ currentPrefix: p.replace(/^\/+|\/+$/g, '') ? p.replace(/^\/+|\/+$/g, '') + '/' : '' }),
+  setCurrentPrefix: (p: string) => {
+    const next = p.replace(/^\/+|\/+$/g, '') ? p.replace(/^\/+|\/+$/g, '') + '/' : '';
+    set({ currentPrefix: next, selectedKeys: [], lastSelectedKey: null });
+  },
   setViewMode: (m: 'grid' | 'list') => set({ viewMode: m }),
   setSortOrder: (o: 'newest' | 'oldest') => set({ sortOrder: o }),
   goUp: () => {
@@ -183,14 +207,40 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   toggleSelect: (key: string) => {
     const current = get().selectedKeys;
     const exists = current.includes(key);
-    set({ selectedKeys: exists ? current.filter((k) => k !== key) : [...current, key] });
+    set({ selectedKeys: exists ? current.filter((k) => k !== key) : [...current, key], lastSelectedKey: key });
   },
 
-  clearSelection: () => set({ selectedKeys: [] }),
+  toggleSelectWithAnchor: (key: string) => {
+    const current = get().selectedKeys;
+    const exists = current.includes(key);
+    set({ selectedKeys: exists ? current.filter((k) => k !== key) : [...current, key], lastSelectedKey: key });
+  },
 
-  selectAll: () => {
-    const allKeys = (get().objects || []).map((o: any) => o.Key).filter(Boolean);
-    set({ selectedKeys: allKeys });
+  selectRange: (orderedKeys: string[], endKey: string) => {
+    const anchor = get().lastSelectedKey;
+    const startIdx = anchor !== null ? orderedKeys.indexOf(anchor) : -1;
+    const endIdx = orderedKeys.indexOf(endKey);
+    if (endIdx === -1) return;
+    const from = startIdx === -1 ? endIdx : Math.min(startIdx, endIdx);
+    const to = startIdx === -1 ? endIdx : Math.max(startIdx, endIdx);
+    const range = orderedKeys.slice(from, to + 1);
+    set({ selectedKeys: range, lastSelectedKey: endKey });
+  },
+
+  toggleSelectAll: (orderedKeys?: string[]) => {
+    const keys = orderedKeys ?? get().displayOrderedKeys;
+    const current = get().selectedKeys;
+    const allSelected = keys.length > 0 && current.length === keys.length;
+    set({ selectedKeys: allSelected ? [] : keys, lastSelectedKey: null });
+  },
+
+  clearSelection: () => set({ selectedKeys: [], lastSelectedKey: null }),
+
+  setDisplayOrderedKeys: (keys: string[]) => set({ displayOrderedKeys: keys }),
+
+  selectAll: (orderedKeys?: string[]) => {
+    const keys = orderedKeys ?? get().displayOrderedKeys;
+    set({ selectedKeys: keys, lastSelectedKey: null });
   },
 
   bulkDelete: async () => {
@@ -222,6 +272,23 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     const remaining = get().objects.filter((o: any) => o.Key !== key);
     const remainingSelected = get().selectedKeys.filter((k) => k !== key);
     set({ objects: remaining, selectedKeys: remainingSelected });
+  },
+
+  deleteFolder: async (prefix: string) => {
+    if (!prefix) return;
+    const res = await fetch('/api/folders', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+      body: JSON.stringify({ prefix }),
+    });
+    if (!res.ok) {
+      const err = (await res.json()) as { error?: string };
+      throw new Error(err?.error || 'Failed to delete folder');
+    }
+    await get().fetchObjects();
   },
 
   bulkDownload: async () => {
@@ -386,8 +453,10 @@ function runQueue(fileMap?: Map<string, File>) {
   const pump = () => {
     const { uploadTasks } = useObjectStore.getState();
     if (!uploadTasks.some((t) => t.status === 'queued' || t.status === 'uploading')) {
-      // done - refresh the grid to show new files
+      // done - refresh the grid and store keys of uploaded files for filter
+      const doneKeys = uploadTasks.filter((t) => t.status === 'done').map((t) => t.key);
       const { fetchObjects } = useObjectStore.getState();
+      useObjectStore.setState({ recentlyUploadedKeys: doneKeys });
       fetchObjects();
       return;
     }

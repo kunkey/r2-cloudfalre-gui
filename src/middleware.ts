@@ -1,51 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-/** Origins được phép gọi API (CMS, v.v.). Mặc định gồm Next.js dev thường gặp. */
-function getAllowedOrigins(): Set<string> {
-  const fallback = 'http://localhost:3000,http://127.0.0.1:3000';
-  const raw = process.env.CORS_ALLOWED_ORIGINS || fallback;
-  return new Set(
-    raw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-}
-
-const allowedOrigins = getAllowedOrigins();
-
-function resolveCorsOrigin(request: NextRequest): string | null {
-  const origin = request.headers.get('origin');
-  if (!origin) return null;
-  if (allowedOrigins.has(origin)) return origin;
-  return null;
+/** Phản chiếu Origin hoặc * — cho phép mọi domain gọi /api/* từ trình duyệt. */
+function resolveCorsAllowOrigin(request: NextRequest): string {
+  return request.headers.get('origin')?.trim() || '*';
 }
 
 /** CORS cho /api/* (upload từ CMS khác origin, ví dụ localhost:3000 → localhost:3423). */
 function middlewareApiCors(request: NextRequest): NextResponse {
-  const corsOrigin = resolveCorsOrigin(request);
+  const corsOrigin = resolveCorsAllowOrigin(request);
   const reqHdrs = request.headers.get('access-control-request-headers');
 
   if (request.method === 'OPTIONS') {
     const headers = new Headers();
-    if (corsOrigin) {
-      headers.set('Access-Control-Allow-Origin', corsOrigin);
-    }
+    headers.set('Access-Control-Allow-Origin', corsOrigin);
     headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
     headers.set(
       'Access-Control-Allow-Headers',
       reqHdrs || 'Authorization, Content-Type, X-Requested-With, Accept',
     );
     headers.set('Access-Control-Max-Age', '86400');
-    headers.set('Vary', 'Origin');
+    if (corsOrigin !== '*') {
+      headers.set('Vary', 'Origin');
+    }
     return new NextResponse(null, { status: 204, headers });
   }
 
   const res = NextResponse.next();
-  if (corsOrigin) {
-    res.headers.set('Access-Control-Allow-Origin', corsOrigin);
+  res.headers.set('Access-Control-Allow-Origin', corsOrigin);
+  if (corsOrigin !== '*') {
+    res.headers.set('Vary', 'Origin');
   }
-  res.headers.set('Vary', 'Origin');
   return res;
 }
 

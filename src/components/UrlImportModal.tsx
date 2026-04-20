@@ -83,20 +83,29 @@ export default function UrlImportModal({
               // refresh list upload
               await fetchObjects();
 
-              // 4. Get signed link
-              const linkRes = await fetch('/api/objects/signed-get', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: JSON.stringify({ key: key }),
-                signal: controller.signal,
-              });
-              if (!linkRes.ok) throw new Error('failed');
-              
-              const data = (await linkRes.json()) as { url?: string };
-              const links = data.url ? [data.url] : [];
+              // 4. Public link for popup (same as copy link / paste upload)
+              const publicBase =
+                process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC?.replace(
+                  /\/$/,
+                  ""
+                );
+              let links: string[] = [];
+              if (publicBase) {
+                links = [`${publicBase}/${key}`];
+              } else {
+                const linkRes = await fetch("/api/objects/signed-get", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+                  },
+                  body: JSON.stringify({ key }),
+                  signal: controller.signal,
+                });
+                if (!linkRes.ok) throw new Error("failed");
+                const data = (await linkRes.json()) as { url?: string };
+                links = data.url ? [data.url] : [];
+              }
               showLinksModal(links);
               
               

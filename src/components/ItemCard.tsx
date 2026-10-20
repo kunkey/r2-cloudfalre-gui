@@ -104,8 +104,10 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
-            setImageUrl(link ?? null);
+            const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
+            const cleanKey = (object.Key || "").replace(/^\/+/, "");
+            const link = base ? `${base}/${cleanKey}` : null;
+            setImageUrl(link);
           }
         }
 
@@ -143,7 +145,9 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
 
   const copyLink = async () => {
     try {
-      const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+      const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
+      const cleanKey = (object.Key || "").replace(/^\/+/, "");
+      const link = base ? `${base}/${cleanKey}` : "";
       if (link) {
         navigator.clipboard.writeText(link);
         setCopied(true);

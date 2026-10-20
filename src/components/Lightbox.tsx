@@ -61,8 +61,10 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${currentObject.Key}`;
-            if (!aborted) setImageUrl(link || null);
+            const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
+            const cleanKey = (currentObject.Key || "").replace(/^\/+/, "");
+            const link = base ? `${base}/${cleanKey}` : null;
+            if (!aborted) setImageUrl(link);
           }
         }
         if (isVid) {

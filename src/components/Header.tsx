@@ -75,7 +75,16 @@ export function Header() {
         if (item.type.startsWith("image/")) {
           const blob = item.getAsFile();
           if (blob) {
-            const file = new File([blob], `pasted-${Date.now()}.png`, {
+            let ext = "png";
+            if (blob.type === "image/gif") ext = "gif";
+            else if (blob.type === "image/jpeg" || blob.type === "image/jpg") ext = "jpg";
+            else if (blob.type === "image/webp") ext = "webp";
+            else if (blob.type === "image/svg+xml") ext = "svg";
+            else if (blob.type.includes("/")) {
+              const sub = blob.type.split("/")[1]?.split("+")[0]?.replace(/[^a-z0-9]/gi, "");
+              if (sub) ext = sub;
+            }
+            const file = new File([blob], `pasted-${Date.now()}.${ext}`, {
               type: blob.type,
             });
             images.push(file);
@@ -123,10 +132,9 @@ export function Header() {
 
 
         // CLOUDFLARE_BUCKET_URL_PUBLIC
-        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
-
-
-        // const data = (await linkRes.json()) as { url?: string };
+        const publicBase = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
+        const cleanKey = (keys[0] || "").replace(/^\/+/, "");
+        const link = publicBase ? `${publicBase}/${cleanKey}` : "";
         const links = link ? [link] : [];
         showLinksModal(links);
       } catch (err) {

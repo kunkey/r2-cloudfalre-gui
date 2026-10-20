@@ -44,7 +44,7 @@ export default function Home() {
             rel="noopener noreferrer"
             className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition"
           >
-            © 2026 - Vũ Duy Lực
+            © 2026 - r2-cloudfalre-gui
           </a>
         </footer>
         <UploadManager />

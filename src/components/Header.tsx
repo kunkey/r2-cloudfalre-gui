@@ -1,12 +1,13 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Upload, FolderPlus, LogOut, LayoutGrid, List, ArrowDownAZ, ArrowUpAZ, Sun, Moon } from "lucide-react";
+import { Search, Upload, FolderPlus, LogOut, LayoutGrid, List, ArrowDownAZ, ArrowUpAZ, Sun, Moon, FileText, Menu, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import { Button } from "./ui/Button";
 import BulkLinksModal from "./BulkLinksModal";
 import { filesFromDirectoryInput } from "@/lib/dnd";
 import UrlImportModal from "./UrlImportModal";
+import { CloudflareLogo } from "./CloudflareLogo";
 import { useTheme } from "./ThemeProvider";
 
 export function Header() {
@@ -34,6 +35,7 @@ export function Header() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const [urlModalOpen, setUrlModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // console.log(uploading);
 
   useEffect(() => {
@@ -75,7 +77,16 @@ export function Header() {
         if (item.type.startsWith("image/")) {
           const blob = item.getAsFile();
           if (blob) {
-            const file = new File([blob], `pasted-${Date.now()}.png`, {
+            let ext = "png";
+            if (blob.type === "image/gif") ext = "gif";
+            else if (blob.type === "image/jpeg" || blob.type === "image/jpg") ext = "jpg";
+            else if (blob.type === "image/webp") ext = "webp";
+            else if (blob.type === "image/svg+xml") ext = "svg";
+            else if (blob.type.includes("/")) {
+              const sub = blob.type.split("/")[1]?.split("+")[0]?.replace(/[^a-z0-9]/gi, "");
+              if (sub) ext = sub;
+            }
+            const file = new File([blob], `pasted-${Date.now()}.${ext}`, {
               type: blob.type,
             });
             images.push(file);
@@ -123,10 +134,9 @@ export function Header() {
 
 
         // CLOUDFLARE_BUCKET_URL_PUBLIC
-        const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${keys[0]}`
-
-
-        // const data = (await linkRes.json()) as { url?: string };
+        const publicBase = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
+        const cleanKey = (keys[0] || "").replace(/^\/+/, "");
+        const link = publicBase ? `${publicBase}/${cleanKey}` : "";
         const links = link ? [link] : [];
         showLinksModal(links);
       } catch (err) {
@@ -150,8 +160,10 @@ export function Header() {
     <header className="sticky top-0 z-40 bg-white/70 dark:bg-gray-900/80 backdrop-blur-md border-b border-black/5 dark:border-white/10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-gray-800 dark:text-gray-100">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Icon logo — chỉ hiện trên màn hình nhỏ */}
+            <CloudflareLogo className="w-7 h-7 sm:hidden" />
+            <h1 className="hidden sm:block text-xl md:text-2xl font-semibold tracking-tight text-gray-800 dark:text-gray-100">
             R2 CLOUDFLARE
             </h1>
             {/* <div
@@ -254,7 +266,7 @@ export function Header() {
                   console.error(e);
                 }
               }}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer hidden lg:inline-flex"
               title="Create Folder"
             >
               <FolderPlus className="w-4 h-4" /> New Folder
@@ -262,7 +274,7 @@ export function Header() {
             <Button
               variant="secondary"
               onClick={() => folderInputRef.current?.click()}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer hidden lg:inline-flex"
               title="Upload Folder"
             >
               <Upload className="w-4 h-4" /> Upload Folder
@@ -271,7 +283,7 @@ export function Header() {
               variant="secondary"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer hidden md:inline-flex"
             >
               <Upload className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               {uploading ? "Uploading…" : "Upload File"}
@@ -280,16 +292,25 @@ export function Header() {
               variant="secondary"
               disabled={uploading}
               onClick={() => setUrlModalOpen(true)}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer hidden xl:inline-flex"
             >
               <Upload className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Import URL
             </Button>
             <Button
               variant="secondary"
+              onClick={() => window.open("/document", "_blank")}
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer hidden lg:inline-flex"
+              title="API Documentation"
+            >
+              <FileText className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
+              API Docs
+            </Button>
+            <Button
+              variant="secondary"
               disabled={uploading}
               onClick={() => logOut()}
-              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer"
+              className="group gap-2 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer hidden lg:inline-flex"
             >
               <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Sign Out
@@ -360,8 +381,111 @@ export function Header() {
                 <Search className="w-5 h-5 text-gray-600 dark:text-gray-300" />
               </button>
             </div>
+
+            {/* Nút menu — chỉ hiện trên mobile/tablet */}
+            <button
+              type="button"
+              aria-label="Menu"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="lg:hidden p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition cursor-pointer shrink-0"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </div>
+
+        {/* Menu mobile */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="lg:hidden overflow-hidden"
+            >
+              <div className="mt-2 mb-1 grid grid-cols-2 gap-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    const name = window.prompt("New folder name");
+                    if (!name) return;
+                    void createFolder(name).catch(console.error);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer"
+                >
+                  <FolderPlus className="w-4 h-4 shrink-0" />
+                  <span className="truncate">New Folder</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    folderInputRef.current?.click();
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Upload Folder</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4 shrink-0" />
+                  <span className="truncate">
+                    {uploading ? "Uploading…" : "Upload File"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setUrlModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Import URL</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    window.open("/document", "_blank");
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer"
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span className="truncate">API Docs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logOut();
+                  }}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-sm text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Sign Out</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <AnimatePresence>
           {open && (
             <motion.div

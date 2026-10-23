@@ -29,22 +29,22 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8F9FB] dark:bg-gray-900">
       <Sidebar />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
         <Header />
         <BulkActions />
         <section className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
             <GalleryGrid />
           </div>
         </section>
-        <footer className="py-3 px-4 border-t border-black/5 dark:border-white/10 flex justify-center">
+        <footer className="py-2 sm:py-3 px-4 border-t border-black/5 dark:border-white/10 flex justify-center">
           <a
             href="https://github.com/kunkeypr"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition"
           >
-            © 2026 - Vũ Duy Lực
+            © 2026 - r2-cloudfalre-gui
           </a>
         </footer>
         <UploadManager />

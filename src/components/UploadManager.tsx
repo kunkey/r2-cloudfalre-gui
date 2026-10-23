@@ -26,22 +26,22 @@ export default function UploadManager() {
     : 0;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[min(92vw,420px)] rounded-xl bg-white/90 dark:bg-gray-800/95 backdrop-blur border border-black/10 dark:border-white/10 shadow-xl">
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div>
-          <div className="text-sm font-medium text-gray-800 dark:text-gray-100">Uploads Progress  </div>
+    <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-auto sm:right-4 z-50 w-auto sm:w-[min(92vw,420px)] rounded-xl bg-white/90 dark:bg-gray-800/95 backdrop-blur border border-black/10 dark:border-white/10 shadow-xl">
+      <div className="px-4 py-3 flex items-start sm:items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-800 dark:text-gray-100">Uploads Progress</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{done}/{total} done • {uploading} running • {failed} failed</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 flex-wrap justify-end">
           {failed > 0 && (
             <Button size="sm" variant="outline" onClick={retryFailed} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Retry</Button>
-          )}  
+          )}
           {uploading > 0 && (
             <Button size="sm" variant="outline" onClick={cancelAllUploads} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Cancel</Button>
           )}
           {done > 0 && (
             <>
-              <Button size="sm" variant="outline" onClick={() => setShowOnlyUploaded(true)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Click to view uploaded files</Button>
+              <Button size="sm" variant="outline" onClick={() => setShowOnlyUploaded(true)} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition hidden sm:inline-flex">View uploaded</Button>
               <Button size="sm" variant="outline" onClick={hideUploadPanel} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Hide</Button>
             </>
           )}

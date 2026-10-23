@@ -41,7 +41,7 @@ loadEnv();
 
 const API_BASE = process.env.TEST_API_URL || 'http://localhost:3423';
 const UPLOAD_URL = `${API_BASE.replace(/\/+$/, '')}/api/uploads/direct`;
-const AUTH_PASSWORD = process.env.APP_PASSWORD || process.env.NEXT_PUBLIC_APP_PASSWORD || '123123123@Aa';
+const AUTH_PASSWORD = process.env.APP_PASSWORD || process.env.NEXT_PUBLIC_APP_PASSWORD || '123123123@@';
 
 // 1x1 valid transparent GIF (GIF89a)
 const SAMPLE_GIF_BASE64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';

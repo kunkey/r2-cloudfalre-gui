@@ -5,13 +5,26 @@ interface ObjectState {
   prefixes: string[]; // folder names (CommonPrefixes)
   selectedKeys: string[];
   searchQuery: string;
-  gridLimit: number;
+  gridLimit: number; // số item mỗi trang
   currentPrefix: string; // path we are viewing
+
+  // ─── Pagination ───
+  page: number; // trang hiện tại (1-based)
+  totalPages: number; // số trang đã biết (>= page)
+  isLastPage: boolean; // true khi đã biết chính xác trang cuối
+  hasMore: boolean; // còn trang kế tiếp không
+  totalCount: number | null; // tổng số object (null = chưa biết)
+  searchResultCount: number; // tổng kết quả tìm kiếm (nếu đang search)
+
   fetchObjects: () => Promise<void>;
-  loadMoreObjects: () => Promise<void>;
+  goToPage: (page: number) => Promise<void>;
+  nextPage: () => Promise<void>;
+  prevPage: () => Promise<void>;
+  firstPage: () => Promise<void>;
+  lastPage: () => Promise<void>;
+
   isLoading: boolean;
   isLoadingMore: boolean;
-  hasMore: boolean;
   toggleSelect: (key: string) => void;
   toggleSelectWithAnchor: (key: string) => void;
   selectRange: (orderedKeys: string[], endKey: string) => void;
@@ -67,6 +80,111 @@ export interface UploadTask {
   error?: string;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Cache phân trang (module scope, không nằm trong state để tránh re-render)
+// ───────────────────────────────────────────────────────────────────────────
+
+interface PageData {
+  objects: any[];
+  prefixes: string[];
+  isTruncated: boolean;
+}
+
+const _pageCache = new Map<number, PageData>();
+/** _tokens[i] = continuationToken dùng để lấy trang (i + 2) */
+const _tokens: string[] = [];
+/** "prefix|pageSize" — đổi khi đổi thư mục hoặc số item/trang thì cache bị xoá */
+let _cacheScope = '';
+/** Kết quả tìm kiếm đã tải về (phân trang client-side) */
+let _searchResults: any[] | null = null;
+let _searchTerm = '';
+let _searchTimer: ReturnType<typeof setTimeout> | null = null;
+/** Tổng số object theo prefix (dùng tính tổng số trang) */
+let _totalCount: number | null = null;
+let _totalCountScope = '';
+
+/** Đếm tổng số object của prefix (cache theo prefix). */
+async function fetchTotalCount(prefix: string): Promise<number | null> {
+  if (_totalCountScope === prefix && _totalCount !== null) return _totalCount;
+  try {
+    const q = new URLSearchParams();
+    if (prefix) q.set('prefix', prefix);
+    const res = await fetch(`/api/objects/count?${q.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { count?: number };
+    _totalCount = typeof data.count === 'number' ? data.count : null;
+    _totalCountScope = prefix;
+    return _totalCount;
+  } catch {
+    return null;
+  }
+}
+
+function resetCache(prefix: string, size: number) {
+  const scope = `${prefix}|${size}`;
+  if (_cacheScope !== scope) {
+    _pageCache.clear();
+    _tokens.length = 0;
+    _cacheScope = scope;
+  }
+}
+
+/** Tải 1 trang từ server (có cache). p là 1-based. */
+async function fetchPageData(p: number, prefix: string, size: number): Promise<PageData> {
+  const cached = _pageCache.get(p);
+  if (cached) return cached;
+
+  const token = p >= 2 ? _tokens[p - 2] : undefined;
+  const q = new URLSearchParams();
+  q.set('limit', String(size));
+  if (prefix) q.set('prefix', prefix);
+  if (token) q.set('continuationToken', token);
+
+  const res = await fetch(`/api/objects?${q.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+    },
+  });
+  const data = (await res.json()) as any;
+
+  const pd: PageData = {
+    objects: data.Contents || [],
+    prefixes: (data.CommonPrefixes || []).map((p: any) => p.Prefix).filter(Boolean),
+    isTruncated: Boolean(data.IsTruncated && data.NextContinuationToken),
+  };
+
+  _pageCache.set(p, pd);
+  if (pd.isTruncated) _tokens[p - 1] = data.NextContinuationToken;
+  return pd;
+}
+
+/** Tải kết quả tìm kiếm (1 lần, phân trang client-side). */
+async function loadSearchResults(term: string, scopePrefix: string): Promise<any[]> {
+  const cacheKey = `${scopePrefix}|${term}`;
+  if (_searchTerm === cacheKey && _searchResults) return _searchResults;
+  const res = await fetch(
+    `/api/objects/search?q=${encodeURIComponent(term)}&limit=5000`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+    },
+  );
+  const data = (await res.json()) as any;
+  let results: any[] = data.Contents || [];
+  // Giới hạn kết quả trong thư mục hiện tại (nếu đang xong một thư mục con)
+  if (scopePrefix) {
+    results = results.filter((o: any) => (o.Key || '').startsWith(scopePrefix));
+  }
+  _searchResults = results;
+  _searchTerm = cacheKey;
+  return results;
+}
+
 export const useObjectStore = create<ObjectState>((set, get) => ({
   objects: [],
   prefixes: [],
@@ -91,59 +209,132 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   isLoadingMore: false,
   hasMore: false,
 
+  // ─── Pagination ───
+  page: 1,
+  totalPages: 1,
+  isLastPage: false,
+  totalCount: null,
+  searchResultCount: 0,
+
+  /** Nạp lại từ đầu (dùng khi đổi thư mục, đổi page size, hoặc sau upload). */
   fetchObjects: async () => {
-    const limit = get().gridLimit;
-    const prefix = get().currentPrefix;
-    set({ isLoading: true, hasMore: false });
-    const q = new URLSearchParams();
-    q.set('limit', String(limit));
-    if (prefix) q.set('prefix', prefix);
-    const res = await fetch(`/api/objects?${q.toString()}` , {
-      headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-    });
-    const data = (await res.json()) as any;
-    set({ 
-      objects: data.Contents || [],
-      prefixes: (data.CommonPrefixes || []).map((p: any) => p.Prefix).filter(Boolean),
-      isLoading: false,
-      hasMore: Boolean(data.IsTruncated && data.NextContinuationToken),
-    });
-    // Stash continuation token in a module-scoped place via closure
-    (useObjectStore as any)._nextToken = data.NextContinuationToken || undefined;
+    _pageCache.clear();
+    _tokens.length = 0;
+    _cacheScope = '';
+    _totalCount = null;
+    _totalCountScope = '';
+    await get().goToPage(1);
   },
 
-  loadMoreObjects: async () => {
-    if (get().isLoadingMore || !get().hasMore) return;
-    const limit = get().gridLimit;
-    const prefix = get().currentPrefix;
-    const token = (useObjectStore as any)._nextToken as string | undefined;
-    if (!token) return;
-    set({ isLoadingMore: true });
-    const q = new URLSearchParams();
-    q.set('limit', String(limit));
-    if (prefix) q.set('prefix', prefix);
-    q.set('continuationToken', token);
-    const res = await fetch(`/api/objects?${q.toString()}` , {
-      headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-    });
-    const data = (await res.json()) as any;
-    set((state) => ({
-      objects: [...(state.objects || []), ...(data.Contents || [])],
-      // prefixes only matter from the first page; keep as-is
-      isLoadingMore: false,
-      hasMore: Boolean(data.IsTruncated && data.NextContinuationToken),
-    }));
-    (useObjectStore as any)._nextToken = data.NextContinuationToken || undefined;
+  goToPage: async (target: number) => {
+    const state = get();
+    const size = state.gridLimit;
+    const prefix = state.currentPrefix;
+    const term = (state.searchQuery || '').trim().toLowerCase();
+
+    // ── Chế độ tìm kiếm: tải 1 lần, phân trang client-side ──
+    if (term) {
+      set({ isLoading: true });
+      try {
+        const results = await loadSearchResults(term, prefix);
+        const totalPages = Math.max(1, Math.ceil(results.length / size));
+        const p = Math.min(Math.max(1, target), totalPages);
+        const start = (p - 1) * size;
+        set({
+          objects: results.slice(start, start + size),
+          prefixes: [],
+          page: p,
+          totalPages,
+          isLastPage: true,
+          hasMore: p < totalPages,
+          totalCount: results.length,
+          searchResultCount: results.length,
+          isLoading: false,
+        });
+      } catch {
+        set({ isLoading: false, objects: [], prefixes: [], page: 1, totalPages: 1, isLastPage: true, hasMore: false, totalCount: 0, searchResultCount: 0 });
+      }
+      return;
+    }
+
+    // ── Chế độ liệt kê thường: phân trang bằng continuationToken ──
+    resetCache(prefix, size);
+    set({ isLoading: true });
+
+    const p = Math.max(1, target);
+    try {
+      // Token là tuần tự → phải tải các trang trước (đã cache thì bỏ qua)
+      for (let i = 1; i <= p; i++) {
+        await fetchPageData(i, prefix, size);
+      }
+
+      const pd = _pageCache.get(p)!;
+
+      // Tải trang kế tiếp để xác định chính xác còn trang hay không
+      let nextExists = false;
+      if (pd.isTruncated) {
+        try {
+          const next = await fetchPageData(p + 1, prefix, size);
+          nextExists = next.isTruncated || next.objects.length > 0;
+        } catch {
+          nextExists = true;
+        }
+      }
+
+      // Lấy tổng số object để biết chính xác tổng số trang
+      const total = await fetchTotalCount(prefix);
+
+      set({
+        objects: pd.objects,
+        prefixes: pd.prefixes,
+        page: p,
+        totalPages: total !== null
+          ? Math.max(1, Math.ceil(total / size))
+          : (nextExists ? Math.max(p + 1, get().totalPages) : p),
+        isLastPage: total !== null ? p >= Math.ceil(total / size) : !nextExists,
+        hasMore: total !== null ? p < Math.ceil(total / size) : nextExists,
+        totalCount: total,
+        searchResultCount: 0,
+        isLoading: false,
+      });
+    } catch (err) {
+      console.error('goToPage failed:', err);
+      set({ isLoading: false });
+    }
   },
 
-  setSearchQuery: (q: string) => set({ searchQuery: q }),
-  setGridLimit: (n: number) => set({ gridLimit: n }),
+  nextPage: async () => {
+    const { page, hasMore, totalPages } = get();
+    if (!hasMore && page >= totalPages) return;
+    await get().goToPage(page + 1);
+  },
+  prevPage: async () => {
+    const { page } = get();
+    if (page <= 1) return;
+    await get().goToPage(page - 1);
+  },
+  firstPage: async () => get().goToPage(1),
+  lastPage: async () => get().goToPage(get().totalPages),
+
+  setSearchQuery: (q: string) => {
+    set({ searchQuery: q });
+    if (_searchTimer) clearTimeout(_searchTimer);
+    // Hiện spinner ngay để không hiển thị kết quả cũ lúc đang gõ
+    set({ isLoading: true });
+    _searchTimer = setTimeout(() => {
+      void get().goToPage(1);
+    }, 350);
+  },
+  setGridLimit: (n: number) => {
+    set({ gridLimit: n });
+    // Đổi page size → nạp lại từ trang 1
+    void get().fetchObjects();
+  },
   setCurrentPrefix: (p: string) => {
     const next = p.replace(/^\/+|\/+$/g, '') ? p.replace(/^\/+|\/+$/g, '') + '/' : '';
+    // Đổi thư mục → vô hiệu hoá cache search (scope đã thay đổi)
+    _searchResults = null;
+    _searchTerm = '';
     set({ currentPrefix: next, selectedKeys: [], lastSelectedKey: null });
   },
   setViewMode: (m: 'grid' | 'list') => set({ viewMode: m }),
@@ -151,7 +342,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   goUp: () => {
     const cur = get().currentPrefix;
     if (!cur) return;
-    const parts = cur.replace(/\/+$/,'').split('/');
+    const parts = cur.replace(/\/+$/, '').split('/');
     parts.pop();
     const parent = parts.join('/');
     set({ currentPrefix: parent ? parent + '/' : '' });
@@ -186,7 +377,9 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     abortAll();
     fileBlobs.clear();
     set((state) => ({
-      uploadTasks: state.uploadTasks.map((t) => ({ ...t, status: t.status === 'done' ? t.status : 'canceled' })),
+      uploadTasks: state.uploadTasks.map((t) =>
+        t.status === 'done' ? t : { ...t, status: 'canceled' as UploadStatus }
+      ),
     }));
   },
   retryFailed: () => {
@@ -257,6 +450,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     // Optimistically remove deleted keys from local objects
     const remaining = get().objects.filter((o: any) => !keys.includes(o.Key));
     set({ objects: remaining, selectedKeys: [] });
+    await refreshCurrentPage();
   },
 
   deleteOne: async (key: string) => {
@@ -272,6 +466,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     const remaining = get().objects.filter((o: any) => o.Key !== key);
     const remainingSelected = get().selectedKeys.filter((k) => k !== key);
     set({ objects: remaining, selectedKeys: remainingSelected });
+    await refreshCurrentPage();
   },
 
   deleteFolder: async (prefix: string) => {
@@ -329,6 +524,19 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     set({ linksModalOpen: true, modalLinks: links || [] });
   },
 }));
+
+/** Nạp lại trang hiện tại (sau khi xóa / thay đổi dữ liệu). */
+async function refreshCurrentPage() {
+  const state = useObjectStore.getState();
+  const term = (state.searchQuery || '').trim().toLowerCase();
+  if (term) {
+    _searchResults = null; // ép tải lại kết quả search
+  } else {
+    _pageCache.delete(state.page);
+    _totalCount = null; // số lượng object đã thay đổi
+  }
+  await state.goToPage(state.page);
+}
 
 // ---- Upload helpers (module scope, use get()/set()) ----
 

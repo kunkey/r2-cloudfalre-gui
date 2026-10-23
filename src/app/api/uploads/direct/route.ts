@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '@/server/r2';
+import { checkApiAuth } from '@/server/auth';
 
 function getExtension(name: string): string {
   const clean = name.split(/[?#]/)[0];
@@ -219,6 +220,9 @@ function resolveFileNameFromUrl(
 
 export async function POST(request: NextRequest) {
   try {
+    const unauthorized = checkApiAuth(request);
+    if (unauthorized) return unauthorized;
+
     const contentTypeHeader = request.headers.get('content-type') || '';
     const isJson = contentTypeHeader.includes('application/json');
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 
 export default function UrlImportModal({
   open,
@@ -42,67 +43,39 @@ export default function UrlImportModal({
               if (url == "" || url == null) return;
               setLoading(true);
 
-              // 1. Fetch file
-              const res = await fetch("/api/fetch-file", {
+              // Upload directly via server endpoint which detects magic bytes and preserves extensions
+              const uploadRes = await fetch("/api/uploads/direct", {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
                 },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({
+                  url: url.trim(),
+                  folder: currentPrefix || "",
+                }),
               });
 
-              if (!res.ok) throw new Error("Failed to fetch external file");
+              if (!uploadRes.ok) {
+                const err = (await uploadRes.json().catch(() => ({}))) as { error?: string };
+                throw new Error(err?.error || "Upload failed");
+              }
 
-              const blob = await res.blob();
-
-              // 2. Generate filename
-              const ext = blob.type.split("/")[1] || "bin";
-              const fileName = `import-${Date.now()}.${ext}`;
-
-              const file = new File([blob], fileName, { type: blob.type });
-
-              // 3. Upload to R2
-              const formData = new FormData();
-              const base = currentPrefix || "";
-              const key = `${base}${file.name}`;
-
-              formData.append("file", file);
-              formData.append("key", key);
-
-              const uploadRes = await fetch("/api/uploads/direct", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: formData,
-              });
-
-              if (!uploadRes.ok) throw new Error("Upload failed");
+              const data = (await uploadRes.json()) as { urls?: string[]; uploaded?: string[] };
 
               // refresh list upload
               await fetchObjects();
 
-              // 4. Get signed link
-              const linkRes = await fetch('/api/objects/signed-get', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: JSON.stringify({ key: key }),
-                signal: controller.signal,
-              });
-              if (!linkRes.ok) throw new Error('failed');
-              
-              const data = (await linkRes.json()) as { url?: string };
-              const links = data.url ? [data.url] : [];
+              // Public link for popup
+              const links = data.urls && data.urls.length > 0
+                ? data.urls
+                : (data.uploaded || []).map((key) => buildPublicUrl(key));
+
               showLinksModal(links);
-              
-              
               onClose();
-            } catch (err) {
-              console.error(err);
+            } catch (error: any) {
+              console.error("URL Import failed:", error);
+              alert(error?.message || "Failed to import file from URL");
             } finally {
               setLoading(false);
             }

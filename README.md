@@ -73,6 +73,33 @@ Allow your app origin for GET, PUT, HEAD with appropriate headers (e.g., `Author
 }
 ```
 
+## Vercel Deployment
+
+1. **Connect repo** — Import project from GitHub vào [Vercel](https://vercel.com).
+
+2. **Environment Variables** — Thêm các biến sau trong Vercel Project Settings → Environment Variables:
+
+   | Variable | Required | Mô tả |
+   |----------|----------|-------|
+   | `CLOUDFLARE_ACCOUNT_ID` | ✅ | Cloudflare Account ID |
+   | `CLOUDFLARE_ACCESS_KEY` | ✅ | R2 Access Key |
+   | `CLOUDFLARE_SECRET_ACCESS_KEY` | ✅ | R2 Secret Key |
+   | `CLOUDFLARE_BUCKETNAME` | ✅ | Tên bucket R2 |
+   | `APP_PASSWORD` | ✅ | Bearer token bảo vệ API |
+   | `NEXT_PUBLIC_APP_PASSWORD` | ✅ | Giống APP_PASSWORD (client gọi API) |
+   | `CLOUDFLARE_BUCKET_URL` | ❌ | Public base URL cho direct links |
+   | `NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC` | ❌ | Public R2 URL (nếu dùng r2.dev) |
+   | `NEXT_PUBLIC_THUMBNAIL_URL` | ❌ | URL Worker thumbnail |
+   | `CLOUDFLARE_REGION` | ❌ | Mặc định `auto` |
+   | `URL_TTL_SECONDS` | ❌ | Mặc định 900 |
+
+3. **R2 CORS** — Thêm domain Vercel vào CORS của bucket R2:
+   ```
+   AllowedOrigins: ["https://your-app.vercel.app", "https://*.vercel.app"]
+   ```
+
+4. **Lock file warning** — Nếu thấy cảnh báo `package-lock.json` khi dùng yarn: xóa `package-lock.json` và commit, hoặc dùng npm thống nhất.
+
 ## Docker (quickstart)
 
 1. Ensure `.env` is populated (same keys as local).

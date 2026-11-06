@@ -6,7 +6,9 @@
     "dev": "next dev -p 3423",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:upload": "node scripts/test-upload.js",
+    "test:upload:curl": "bash scripts/test-upload-curl.sh"
   },
   "keywords": [
     "cloudflare",
@@ -37,7 +39,7 @@
     "framer-motion": "^12.23.12",
     "lucide-react": "0.540.0",
     "moment": "^2.30.1",
-    "next": "^15.5.0",
+    "next": "^16.1.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwind-merge": "^3.3.1",

@@ -590,16 +590,16 @@ await fetch(presign.urls[0], {
     path: '/api/uploads/direct',
     title: 'Upload trực tiếp qua server',
     summary:
-      'Upload file hoặc import file từ URL, server tải về rồi đẩy lên R2. Giữ nguyên đuôi file (kiểm tra magic bytes để chống file sai đuôi).',
+      'Upload NHIỀU file cùng lúc (ảnh, MP4, hoặc cả bộ HLS: .m3u8 + .ts + .key) hoặc import file từ URL, server tải về rồi đẩy lên R2. Giữ nguyên đuôi file (kiểm tra magic bytes để chống file sai đuôi). Trả về link public https://cf-vng.com/...',
     auth: 'bearer',
     note:
-      'BẮT BUỘC passkey. Gửi theo 1 trong 3 cách: header "Authorization: Bearer <APP_PASSWORD>", header "x-api-key: <APP_PASSWORD>", hoặc cookie "site_auth=<APP_PASSWORD>". Thiếu/sai → 401.',
+      'BẮT BUỘC passkey. Gửi theo 1 trong 3 cách: header "Authorization: Bearer <APP_PASSWORD>", header "x-api-key: <APP_PASSWORD>", hoặc cookie "site_auth=<APP_PASSWORD>". Thiếu/sai → 401.\n\nUpload nhiều file: lặp lại field "file" (hoặc "files"/"file[]"/"files[]") nhiều lần trong cùng 1 request multipart. Field "key" tương ứng theo thứ tự (lặp lại "key" nhiều lần) để đặt tên/path chính xác cho file HLS, ví dụ "videos/abc/master.m3u8" và "videos/abc/seg-1.ts".\n\nGiới hạn: tối đa 500 file/request (MAX_FILES_PER_REQUEST), upload song song 8 file (UPLOAD_CONCURRENCY). File lỗi được trả về ở field "failed", các file còn lại vẫn upload thành công.',
     body: [
       {
         name: 'file / files',
         type: 'File | File[]',
         description:
-          '(multipart/form-data) File cần upload. Field lặp lại "file" hoặc "files".',
+          '(multipart/form-data) File cần upload. Field lặp lại "file", "files", "file[]" hoặc "files[]" — hỗ trợ upload nhiều file cùng lúc (HLS segments, MP4, ảnh...).',
       },
       {
         name: 'url / urls',
@@ -611,7 +611,7 @@ await fetch(presign.urls[0], {
         name: 'key / keys',
         type: 'string | string[]',
         description:
-          'Key đích tùy chọn (ghép theo thứ tự file/url). Nếu bỏ trống sẽ suy ra từ tên file.',
+          'Key đích tùy chọn (ghép theo thứ tự file/url). Giữ nguyên đường dẫn lồng nhau cho HLS, ví dụ "videos/<id>/master.m3u8". Nếu bỏ trống sẽ suy ra từ tên file.',
       },
       {
         name: 'folder',
@@ -637,6 +637,7 @@ await fetch(presign.urls[0], {
     errors: [
       { status: 401, message: 'Thiếu hoặc sai passkey → { "error": "Unauthorized" }' },
       { status: 400, message: 'Không có file/url → { "error": "No files or urls provided" }' },
+      { status: 413, message: 'Quá nhiều file trong 1 request (> MAX_FILES_PER_REQUEST)' },
       { status: 500, message: 'Không tải được URL nguồn hoặc lỗi R2' },
     ],
     curl: `# Upload 1 file
@@ -644,6 +645,18 @@ curl -X POST "{{BASE}}/api/uploads/direct" \\
   -H "Authorization: Bearer {{PASS}}" \\
   -F "file=@photo.jpg" \\
   -F "folder=Images/Uploads"
+
+# Upload cả bộ HLS (master.m3u8 + nhiều segment .ts + .key) trong 1 request
+curl -X POST "{{BASE}}/api/uploads/direct" \\
+  -H "Authorization: Bearer {{PASS}}" \\
+  -F "file=@master.m3u8" \\
+  -F "key=videos/abc/master.m3u8" \\
+  -F "file=@seg-1.ts" \\
+  -F "key=videos/abc/seg-1.ts" \\
+  -F "file=@seg-2.ts" \\
+  -F "key=videos/abc/seg-2.ts" \\
+  -F "file=@enc.key" \\
+  -F "key=videos/abc/enc.key"
 
 # Import từ URL
 curl -X POST "{{BASE}}/api/uploads/direct" \\
@@ -661,6 +674,27 @@ const res = await fetch('{{BASE}}/api/uploads/direct', {
   body: form,
 });
 const { uploaded, urls } = await res.json();
+
+// (a2) multipart — upload nhiều file HLS + MP4 cùng lúc
+const form2 = new FormData();
+const base = 'videos/abc';
+const hlsFiles = [
+  { blob: m3u8Blob, name: 'master.m3u8' },
+  ...segments.map((s, i) => ({ blob: s.blob, name: \`seg-\${i}.ts\` })),
+];
+for (const f of hlsFiles) {
+  form2.append('file', f.blob, f.name);
+  form2.append('key', \`\${base}/\${f.name}\`);
+}
+form2.append('file', mp4Blob, 'video.mp4');
+form2.append('key', \`\${base}/video.mp4\`);
+
+const res2 = await fetch('{{BASE}}/api/uploads/direct', {
+  method: 'POST',
+  headers: { Authorization: \`Bearer {{PASS}}\` },
+  body: form2,
+}).then((r) => r.json());
+// res2.urls → ["https://cf-vng.com/videos/abc/master.m3u8", ...]
 
 // (b) JSON — import từ URL
 await fetch('{{BASE}}/api/uploads/direct', {
@@ -684,7 +718,7 @@ await fetch('{{BASE}}/api/uploads/direct', {
     path: '/api/download',
     title: 'Lấy link tải (nhiều file)',
     summary:
-      'Trả về danh sách link tải cho nhiều key. Nếu có CLOUDFLARE_BUCKET_URL sẽ trả link public, ngược lại trả presigned URL.',
+      'Trả về danh sách link tải cho nhiều key. Link public dùng base URL https://cf-vng.com (fallback cứng nếu chưa cấu hình env).',
     auth: 'bearer',
     body: [
       {
@@ -702,7 +736,7 @@ await fetch('{{BASE}}/api/uploads/direct', {
   ]
 }`,
     note:
-      'mode = "signed" nếu không cấu hình CLOUDFLARE_BUCKET_URL — khi đó link có chữ ký và hết hạn sau URL_TTL_SECONDS.',
+      'mode = "public" với base URL lấy từ CLOUDFLARE_BUCKET_URL → PUBLIC_BASE_URL → NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC → fallback https://cf-vng.com.',
     curl: `curl -X POST "{{BASE}}/api/download" \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer {{PASS}}" \\

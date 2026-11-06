@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter } from "./ui/Card";
 import { Link2, Download, Trash2, Loader2 } from "lucide-react";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 import moment from "moment";
 import { filesize } from "filesize";
 
@@ -104,9 +105,7 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
-            const cleanKey = (object.Key || "").replace(/^\/+/, "");
-            const link = base ? `${base}/${cleanKey}` : null;
+            const link = buildPublicUrl(object.Key || "");
             setImageUrl(link);
           }
         }
@@ -145,9 +144,7 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
 
   const copyLink = async () => {
     try {
-      const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
-      const cleanKey = (object.Key || "").replace(/^\/+/, "");
-      const link = base ? `${base}/${cleanKey}` : "";
+      const link = buildPublicUrl(object.Key || "");
       if (link) {
         navigator.clipboard.writeText(link);
         setCopied(true);

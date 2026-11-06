@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 
 const IMAGE_EXT = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"];
 const VIDEO_EXT = [".mp4", ".webm", ".mov", ".m4v", ".ogg", ".ogv"];
@@ -61,9 +62,7 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
-            const cleanKey = (currentObject.Key || "").replace(/^\/+/, "");
-            const link = base ? `${base}/${cleanKey}` : null;
+            const link = buildPublicUrl(currentObject.Key || "");
             if (!aborted) setImageUrl(link);
           }
         }

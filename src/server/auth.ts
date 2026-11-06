@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -9,23 +8,67 @@ import { NextRequest, NextResponse } from 'next/server';
  *   1. Authorization: Bearer <APP_PASSWORD>
  *   2. x-api-key: <APP_PASSWORD>
  *   3. Cookie: site_auth=<APP_PASSWORD>   (tiện cho request same-origin từ trình duyệt)
+ *
+ * Ngoài passkey chính, server chấp nhận thêm các alias (APP_PASSWORD_ALIASES,
+ * phân tách bằng dấu phẩy) để các service cũ đang dùng passkey khác vẫn hoạt động.
  */
 
-/** So sánh chuỗi an toàn về timing (tránh lộ thông tin qua response time). */
+/**
+ * So sánh chuỗi an toàn về timing (tránh lộ thông tin qua response time).
+ *
+ * Cài đặt thuần JS (không dùng `crypto` của Node) để file này import được
+ * ở cả Edge runtime (middleware) lẫn Node runtime (route handlers).
+ */
 function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) {
-    // Vẫn chạy 1 lần compare để giữ thời gian xử lý không lộ độ dài khác biệt rõ ràng.
-    timingSafeEqual(bufA, bufA);
-    return false;
+  const strA = String(a);
+  const strB = String(b);
+  const lenA = strA.length;
+  const lenB = strB.length;
+
+  // Luôn duyệt đủ max(lenA, lenB) để thời gian xử lý không phụ thuộc độ dài.
+  const maxLen = Math.max(lenA, lenB);
+  let diff = lenA ^ lenB;
+
+  for (let i = 0; i < maxLen; i++) {
+    const codeA = i < lenA ? strA.charCodeAt(i) : 0;
+    const codeB = i < lenB ? strB.charCodeAt(i) : 0;
+    diff |= codeA ^ codeB;
   }
-  return timingSafeEqual(bufA, bufB);
+
+  return diff === 0;
 }
 
 /** Lấy passkey đã cấu hình, hoặc null nếu chưa cấu hình. */
 export function getApiPassword(): string | null {
   return process.env.APP_PASSWORD || process.env.NEXT_PUBLIC_APP_PASSWORD || null;
+}
+
+/**
+ * Danh sách passkey hợp lệ: passkey chính + các alias.
+ * Alias lấy từ APP_PASSWORD_ALIASES (dấu phẩy phân tách).
+ */
+export function getApiPasswords(): string[] {
+  const list: string[] = [];
+
+  const primary = getApiPassword();
+  if (primary) list.push(primary);
+
+  const aliases = String(process.env.APP_PASSWORD_ALIASES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const alias of aliases) {
+    if (!list.includes(alias)) list.push(alias);
+  }
+
+  return list;
+}
+
+/** Kiểm tra passkey có nằm trong danh sách hợp lệ không. */
+export function isValidApiKey(provided: string | null | undefined): boolean {
+  if (!provided) return false;
+  return getApiPasswords().some((expected) => safeEqual(provided, expected));
 }
 
 /** Lấy passkey từ request (header hoặc cookie). */
@@ -64,7 +107,7 @@ export function checkApiAuth(request: NextRequest): NextResponse | null {
 
   const provided = extractProvidedKey(request);
 
-  if (!provided || !safeEqual(provided, expected)) {
+  if (!isValidApiKey(provided)) {
     return NextResponse.json(
       { error: 'Unauthorized', message: 'Missing or invalid API key' },
       { status: 401 },

@@ -8,6 +8,7 @@ import BulkLinksModal from "./BulkLinksModal";
 import { filesFromDirectoryInput } from "@/lib/dnd";
 import UrlImportModal from "./UrlImportModal";
 import { CloudflareLogo } from "./CloudflareLogo";
+import { buildPublicUrl } from "@/lib/public-url";
 import { useTheme } from "./ThemeProvider";
 
 export function Header() {
@@ -134,9 +135,7 @@ export function Header() {
 
 
         // CLOUDFLARE_BUCKET_URL_PUBLIC
-        const publicBase = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
-        const cleanKey = (keys[0] || "").replace(/^\/+/, "");
-        const link = publicBase ? `${publicBase}/${cleanKey}` : "";
+        const link = buildPublicUrl(keys[0] || "");
         const links = link ? [link] : [];
         showLinksModal(links);
       } catch (err) {

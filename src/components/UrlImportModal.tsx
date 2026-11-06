@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 
 export default function UrlImportModal({
   open,
@@ -68,10 +69,7 @@ export default function UrlImportModal({
               // Public link for popup
               const links = data.urls && data.urls.length > 0
                 ? data.urls
-                : (data.uploaded || []).map((key) => {
-                    const base = (process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC || "").replace(/\/+$/, "");
-                    return base ? `${base}/${key.replace(/^\/+/, "")}` : `/${key}`;
-                  });
+                : (data.uploaded || []).map((key) => buildPublicUrl(key));
 
               showLinksModal(links);
               onClose();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isValidApiKey } from '@/server/auth';
 
 /** Phản chiếu Origin hoặc * — cho phép mọi domain gọi /api/* từ trình duyệt. */
 function resolveCorsAllowOrigin(request: NextRequest): string {
@@ -39,7 +40,6 @@ export function middleware(req: NextRequest) {
   }
 
   const url = req.nextUrl.clone();
-  const password = process.env.APP_PASSWORD;
 
   if (url.pathname.startsWith('/auth')) {
     return NextResponse.next();
@@ -47,7 +47,7 @@ export function middleware(req: NextRequest) {
 
   const hasAuth = req.cookies.get('site_auth')?.value;
 
-  if (!hasAuth || hasAuth !== password) {
+  if (!isValidApiKey(hasAuth)) {
     url.pathname = '/auth';
     return NextResponse.redirect(url);
   }

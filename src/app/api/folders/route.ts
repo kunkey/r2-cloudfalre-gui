@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client, deleteFolderByPrefix } from '@/server/r2';
+import { checkApiAuth } from '@/server/auth';
 
 // Create a zero-byte "folder" marker under parentPrefix
 export async function POST(request: NextRequest) {
   try {
+    const unauthorized = checkApiAuth(request);
+    if (unauthorized) return unauthorized;
+
     const { parentPrefix = '', name } = (await request.json()) as { parentPrefix?: string; name: string };
     if (!name || typeof name !== 'string') {
       return NextResponse.json({ error: 'Missing folder name' }, { status: 400 });
@@ -41,6 +45,9 @@ export async function POST(request: NextRequest) {
 // Delete folder (all objects under prefix)
 export async function DELETE(request: NextRequest) {
   try {
+    const unauthorized = checkApiAuth(request);
+    if (unauthorized) return unauthorized;
+
     const { prefix } = (await request.json()) as { prefix: string };
     if (!prefix || typeof prefix !== 'string') {
       return NextResponse.json({ error: 'Missing prefix' }, { status: 400 });

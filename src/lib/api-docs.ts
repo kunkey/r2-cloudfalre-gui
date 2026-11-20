@@ -709,6 +709,228 @@ await fetch('{{BASE}}/api/uploads/direct', {
   }),
 });`,
   },
+  {
+    id: 'uploads-multipart-init',
+    group: 'Upload',
+    method: 'POST',
+    path: '/api/uploads/multipart/init',
+    title: 'Khởi tạo Multipart Upload (Hỗ trợ file lớn 2GB - 3GB+)',
+    summary:
+      'Khởi tạo phiên S3 Multipart Upload trên Cloudflare R2 để tải các file dung lượng lớn (video 2GB, 3GB, 5GB+) an toàn, không lo tràn RAM server hay timeout reverse proxy.',
+    auth: 'bearer',
+    note:
+      'BẮT BUỘC passkey (Bearer token, x-api-key hoặc cookie site_auth). Trả về uploadId dùng cho các bước upload phân đoạn (part) tiếp theo.',
+    body: [
+      {
+        name: 'key',
+        type: 'string',
+        required: true,
+        description: 'Đường dẫn đích của file trên R2 bucket.',
+        example: 'Videos/sample-2gb.mp4',
+      },
+      {
+        name: 'contentType',
+        type: 'string',
+        required: false,
+        description: 'MIME type của file (tự động suy ra nếu bỏ trống).',
+        example: 'video/mp4',
+      },
+    ],
+    response: `{
+  "uploadId": "2~gQ8eX3...",
+  "key": "Videos/sample-2gb.mp4"
+}`,
+    errors: [
+      { status: 401, message: 'Thiếu hoặc sai passkey' },
+      { status: 400, message: 'Thiếu trường key' },
+      { status: 500, message: 'Lỗi khởi tạo từ Cloudflare R2' },
+    ],
+    curl: `curl -X POST "{{BASE}}/api/uploads/multipart/init" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer {{PASS}}" \\
+  -d '{"key":"Videos/sample-2gb.mp4","contentType":"video/mp4"}'`,
+    js: `const res = await fetch('{{BASE}}/api/uploads/multipart/init', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: \`Bearer {{PASS}}\`,
+  },
+  body: JSON.stringify({
+    key: 'Videos/sample-2gb.mp4',
+    contentType: 'video/mp4',
+  }),
+});
+const { uploadId, key } = await res.json();`,
+  },
+  {
+    id: 'uploads-multipart-part',
+    group: 'Upload',
+    method: 'POST',
+    path: '/api/uploads/multipart/part',
+    title: 'Upload phân đoạn Multipart (Chunk 10MB)',
+    summary:
+      'Upload từng chunk nhị phân (khuyến nghị 10MB/phân đoạn). Server stream trực tiếp phân đoạn lên Cloudflare R2 và trả về ETag cùng PartNumber.',
+    auth: 'bearer',
+    note:
+      'Client chia file thành các chunk 10MB bằng file.slice(start, end) và upload tuần tự. PartNumber bắt đầu từ 1. Mỗi request chỉ tốn ~10MB RAM và có thể retry độc lập nếu mạng gián đoạn.',
+    body: [
+      {
+        name: 'key',
+        type: 'string',
+        required: true,
+        description: 'Key của file (trùng với key lúc init).',
+        example: 'Videos/sample-2gb.mp4',
+      },
+      {
+        name: 'uploadId',
+        type: 'string',
+        required: true,
+        description: 'ID phiên upload nhận được từ /api/uploads/multipart/init.',
+      },
+      {
+        name: 'partNumber',
+        type: 'number',
+        required: true,
+        description: 'Số thứ tự của phân đoạn (1, 2, 3...).',
+        example: '1',
+      },
+      {
+        name: 'chunk',
+        type: 'File | Blob',
+        required: true,
+        description: 'Dữ liệu nhị phân của phân đoạn (10MB).',
+      },
+    ],
+    response: `{
+  "partNumber": 1,
+  "etag": "\\"b10a8db164e0754105b7a99be72e3fe5\\""
+}`,
+    errors: [
+      { status: 401, message: 'Thiếu hoặc sai passkey' },
+      { status: 400, message: 'Thiếu key, uploadId, partNumber hoặc chunk' },
+      { status: 500, message: 'Upload phân đoạn thất bại' },
+    ],
+    curl: `curl -X POST "{{BASE}}/api/uploads/multipart/part" \\
+  -H "Authorization: Bearer {{PASS}}" \\
+  -F "key=Videos/sample-2gb.mp4" \\
+  -F "uploadId=2~gQ8eX3..." \\
+  -F "partNumber=1" \\
+  -F "chunk=@chunk_01.part"`,
+    js: `const form = new FormData();
+form.append('key', 'Videos/sample-2gb.mp4');
+form.append('uploadId', uploadId);
+form.append('partNumber', '1');
+form.append('chunk', chunkBlob);
+
+const res = await fetch('{{BASE}}/api/uploads/multipart/part', {
+  method: 'POST',
+  headers: { Authorization: \`Bearer {{PASS}}\` },
+  body: form,
+});
+const { partNumber, etag } = await res.json();`,
+  },
+  {
+    id: 'uploads-multipart-complete',
+    group: 'Upload',
+    method: 'POST',
+    path: '/api/uploads/multipart/complete',
+    title: 'Hoàn tất Multipart Upload (Hợp nhất file)',
+    summary:
+      'Gửi danh sách toàn bộ các part đã upload thành công (PartNumber và ETag). Cloudflare R2 sẽ tự động hợp nhất các chunk thành 1 file hoàn chỉnh trên bucket và trả về link public.',
+    auth: 'bearer',
+    body: [
+      {
+        name: 'key',
+        type: 'string',
+        required: true,
+        description: 'Key của file.',
+        example: 'Videos/sample-2gb.mp4',
+      },
+      {
+        name: 'uploadId',
+        type: 'string',
+        required: true,
+        description: 'ID phiên upload từ /api/uploads/multipart/init.',
+      },
+      {
+        name: 'parts',
+        type: 'array<{PartNumber, ETag}>',
+        required: true,
+        description: 'Danh sách các part đã upload thành công kèm ETag tương ứng.',
+      },
+    ],
+    response: `{
+  "success": true,
+  "key": "Videos/sample-2gb.mp4",
+  "location": "https://...",
+  "url": "https://cf-vng.com/Videos/sample-2gb.mp4"
+}`,
+    errors: [
+      { status: 401, message: 'Thiếu hoặc sai passkey' },
+      { status: 400, message: 'Thiếu key, uploadId, hoặc parts' },
+      { status: 500, message: 'Lỗi hợp nhất file trên R2' },
+    ],
+    curl: `curl -X POST "{{BASE}}/api/uploads/multipart/complete" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer {{PASS}}" \\
+  -d '{"key":"Videos/sample-2gb.mp4","uploadId":"2~gQ8eX3...","parts":[{"PartNumber":1,"ETag":"\\"b10a8...\\""}]}'`,
+    js: `const res = await fetch('{{BASE}}/api/uploads/multipart/complete', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: \`Bearer {{PASS}}\`,
+  },
+  body: JSON.stringify({
+    key: 'Videos/sample-2gb.mp4',
+    uploadId,
+    parts: collectedParts,
+  }),
+});
+const { success, url } = await res.json();`,
+  },
+  {
+    id: 'uploads-multipart-abort',
+    group: 'Upload',
+    method: 'POST',
+    path: '/api/uploads/multipart/abort',
+    title: 'Hủy phiên Multipart Upload',
+    summary:
+      'Hủy phiên upload dở dang khi người dùng bấm Hủy (Cancel) hoặc gặp lỗi. Cloudflare R2 sẽ dọn dẹp các chunk tạm để giải phóng dung lượng bucket.',
+    auth: 'bearer',
+    body: [
+      {
+        name: 'key',
+        type: 'string',
+        required: true,
+        description: 'Key của file.',
+      },
+      {
+        name: 'uploadId',
+        type: 'string',
+        required: true,
+        description: 'ID phiên upload cần hủy.',
+      },
+    ],
+    response: `{
+  "success": true
+}`,
+    errors: [
+      { status: 401, message: 'Thiếu hoặc sai passkey' },
+      { status: 400, message: 'Thiếu key hoặc uploadId' },
+    ],
+    curl: `curl -X POST "{{BASE}}/api/uploads/multipart/abort" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer {{PASS}}" \\
+  -d '{"key":"Videos/sample-2gb.mp4","uploadId":"2~gQ8eX3..."}'`,
+    js: `await fetch('{{BASE}}/api/uploads/multipart/abort', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: \`Bearer {{PASS}}\`,
+  },
+  body: JSON.stringify({ key, uploadId }),
+});`,
+  },
 
   // ─────────────────── Download & Proxy ───────────────────
   {

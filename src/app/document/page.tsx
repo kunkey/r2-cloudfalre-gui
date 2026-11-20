@@ -252,7 +252,7 @@ export default function DocumentPage() {
   }, [filtered]);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased">
+    <div className="min-h-screen bg-[#F8F9FB] dark:bg-[#0f172a] text-gray-900 dark:text-gray-100 antialiased">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
         <div className="flex items-start justify-between gap-6 mb-8">

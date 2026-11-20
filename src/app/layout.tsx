@@ -1,7 +1,9 @@
 import './globals.css';
+import 'sileo/styles.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { Toaster } from 'sileo';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -24,9 +26,18 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`min-h-screen bg-[#F8F9FB] dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased ${inter.className}`}>
+      <body className={`min-h-screen bg-[#F8F9FB] dark:bg-[#0f172a] text-gray-900 dark:text-gray-100 antialiased ${inter.className}`}>
         <ThemeProvider>
           {children}
+          {/* Sileo toast: theme light in Sileo uses #1a1a1a dark background + fill #161e31 */}
+          <Toaster
+            position="top-right"
+            theme="light"
+            options={{
+              fill: '#161e31',
+              roundness: 16,
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>

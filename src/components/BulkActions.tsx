@@ -43,11 +43,11 @@ export function BulkActions() {
   };
 
   return (
-    <div className="bg-white/70 dark:bg-gray-900/80 backdrop-blur-md border-b border-black/5 dark:border-white/10">
+    <div className="bg-white/80 dark:bg-[#0f172a]/85 backdrop-blur-md border-b border-black/5 dark:border-white/[0.08] transition-colors">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {showOnlyUploaded && (
-          <div className="flex items-center gap-2 py-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 mt-2">
-            <span className="text-sm text-amber-800 dark:text-amber-200 flex-1 min-w-0 truncate">
+          <div className="flex items-center gap-2 py-2 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 rounded-xl px-3 mt-2">
+            <span className="text-sm text-amber-700 dark:text-amber-300 flex-1 min-w-0 truncate">
               Click to view uploaded files
             </span>
             <Button size="sm" variant="outline" onClick={() => setShowOnlyUploaded(false)} className="cursor-pointer shrink-0">
@@ -60,7 +60,7 @@ export function BulkActions() {
         <div className="flex items-center gap-1.5 py-2 overflow-x-auto flex-nowrap scrollbar-thin">
           <button
             onClick={() => navigateTo('')}
-            className="cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0"
+            className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 transition shrink-0"
             title="Home"
           >
             <Home className="w-4 h-4" />
@@ -70,13 +70,13 @@ export function BulkActions() {
             const prefix = breadcrumbs.slice(0, i + 1).join('/') + '/';
             return (
               <span key={prefix} className="cursor-pointer flex items-center gap-1.5 shrink-0">
-                <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <ChevronRight className="w-3.5 h-3.5 text-gray-400 dark:text-slate-600" />
                 <button
                   onClick={() => navigateTo(prefix)}
-                  className="cursor-pointer flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition max-w-[120px] sm:max-w-[180px]"
+                  className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 transition max-w-[120px] sm:max-w-[180px]"
                   title={prefix}
                 >
-                  <Folder className="w-4 h-4 shrink-0" />
+                  <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   <span className="text-sm font-medium truncate">{name}</span>
                 </button>
               </span>
@@ -84,72 +84,86 @@ export function BulkActions() {
           })}
         </div>
 
-        {/* Thanh công cụ — wrap trên mobile */}
-        <div className="flex flex-wrap md:flex-nowrap gap-2 items-center py-2 md:py-3 md:h-16">
-          {currentPrefix ? (
-            <Button
-              variant="outline"
-              onClick={() => { try { window.history.back(); } catch { } }}
-              className="gap-2 shrink-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition"
-              title="Back"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-          ) : null}
-
-          <Button variant="outline" onClick={() => selectAll()} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0">
-            Select All
-          </Button>
-
-          {hasSelection && (
-            <>
-              <Button variant="outline" onClick={clearSelection} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0">
-                Unselect
-              </Button>
-              <div className="hidden md:block mx-2 h-6 w-px bg-black/10 dark:bg-white/20" />
-              <Button variant="outline" onClick={bulkCopyLinks} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0">
-                Copy Links
-              </Button>
-              <Button variant="outline" onClick={bulkDownload} className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0">
-                Download
-              </Button>
+        {/* Thanh công cụ: cân bằng hai bên, không bao giờ bị đè hay tràn trên mobile */}
+        <div className="flex items-center justify-between gap-2 py-2 md:py-3 min-h-[44px] flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {currentPrefix ? (
               <Button
                 variant="outline"
-                onClick={() => setShowDeleteModal(true)}
-                disabled={!hasSelection}
-                className="font-semibold text-white bg-red-500 hover:bg-red-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition shrink-0"
+                onClick={() => { try { window.history.back(); } catch { } }}
+                className="gap-1.5 shrink-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
+                title="Back"
               >
-                Delete
+                <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Back</span>
               </Button>
-              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 shrink-0 tabular-nums">
-                {selectedKeys.length.toLocaleString('de-DE')} selected
-              </span>
-            </>
-          )}
+            ) : null}
 
-          {/* Bộ chọn số item/trang — ẩn trên mobile nhỏ */}
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
-            <div className="mx-2 h-6 w-px bg-black/10 dark:bg-white/20" />
-            <label className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">Show</label>
-            <select
-              className="text-sm border border-black/10 dark:border-white/20 rounded-md px-2 py-1 bg-white dark:bg-gray-800 dark:text-gray-200 cursor-pointer"
-              value={gridLimit}
-              onChange={(e) => setGridLimit(Number(e.target.value))}
+            <Button
+              variant="outline"
+              onClick={() => selectAll()}
+              className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition shrink-0 rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
             >
-              <option value={24}>24</option>
-              <option value={48}>48</option>
-              <option value={96}>96</option>
-              <option value={200}>200</option>
-              <option value={500}>500</option>
-              <option value={1000}>1000</option>
-              <option value={2000}>2000</option>
-              <option value={5000}>5000</option>
-              <option value={10000}>10.000</option>
-            </select>
+              Select All
+            </Button>
+
+            {hasSelection && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={clearSelection}
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition shrink-0 rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
+                >
+                  Unselect
+                </Button>
+                <div className="hidden md:block mx-1 h-5 w-px bg-black/10 dark:bg-white/[0.1]" />
+                <Button
+                  variant="outline"
+                  onClick={bulkCopyLinks}
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition shrink-0 rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
+                >
+                  Copy Links
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={bulkDownload}
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition shrink-0 rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
+                >
+                  Download
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteModal(true)}
+                  disabled={!hasSelection}
+                  className="cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border-red-500/20 transition shrink-0 rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3"
+                >
+                  Delete ({selectedKeys.length})
+                </Button>
+              </>
+            )}
           </div>
 
-          <div className="flex-1 min-w-0 flex justify-end sm:pl-4 order-last w-full sm:order-none sm:w-auto">
+          <div className="flex items-center gap-3 shrink-0 ml-auto">
+            {/* Bộ chọn số item/trang — chỉ hiện trên sm trở lên */}
+            <div className="hidden sm:flex items-center gap-2">
+              <label className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">Show</label>
+              <select
+                className="text-xs sm:text-sm border border-black/10 dark:border-white/20 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 dark:text-gray-200 cursor-pointer"
+                value={gridLimit}
+                onChange={(e) => setGridLimit(Number(e.target.value))}
+              >
+                <option value={24}>24</option>
+                <option value={48}>48</option>
+                <option value={96}>96</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
+                <option value={2000}>2000</option>
+                <option value={5000}>5000</option>
+                <option value={10000}>10.000</option>
+              </select>
+            </div>
+
             <StorageQuotaBar />
           </div>
         </div>

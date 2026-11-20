@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Toast } from "./ui/Toast";
+import { toast } from "@/lib/toast";
 import { Card, CardContent, CardFooter } from "./ui/Card";
 import { Link2, Download, Trash2, Loader2 } from "lucide-react";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
@@ -146,7 +147,8 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
     try {
       const link = buildPublicUrl(object.Key || "");
       if (link) {
-        navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(link);
+        toast.success("Link copied", object.Key);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }

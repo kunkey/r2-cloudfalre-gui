@@ -50,7 +50,6 @@ export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps
 
   const open = () => {
     const next = prefix;
-    // push URL state so mouse back navigates correctly
     try {
       const url = new URL(window.location.href);
       url.searchParams.set(
@@ -75,7 +74,7 @@ export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps
     return (
       <>
       <Card
-        className="flex flex-row items-center gap-2 sm:gap-3 cursor-pointer select-none hover:bg-amber-50/50 dark:hover:bg-amber-900/20 transition-colors group"
+        className="flex flex-row items-center gap-2 sm:gap-3 cursor-pointer select-none hover:bg-slate-100/60 dark:hover:bg-white/[0.04] transition-colors group border border-black/5 dark:border-white/[0.08]"
         onClick={open}
         role="button"
         tabIndex={0}
@@ -87,20 +86,20 @@ export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps
         }}
       >
         <CardContent className="flex flex-row items-center gap-2 sm:gap-3 w-full py-2 sm:py-3 px-2 sm:px-4">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-amber-50 dark:bg-amber-900/30 rounded-lg flex items-center justify-center border border-black/5 dark:border-white/10">
-            <Folder className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 dark:text-amber-400" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-amber-500/10 dark:bg-amber-500/15 rounded-xl flex items-center justify-center border border-amber-500/20">
+            <Folder className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 dark:text-amber-400 group-hover:scale-105 transition-transform" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs sm:text-sm font-medium truncate text-gray-800 dark:text-gray-200 select-text">{name}</p>
-            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+            <p className="text-xs sm:text-sm font-semibold truncate text-gray-800 dark:text-slate-100 select-text">{name}</p>
+            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">
               {stats == null
-                ? "Đang tải..."
+                ? "Loading..."
                 : `${formatFileCount(stats.count)} file${stats.count !== 1 ? "s" : ""} · ${formatBytes(stats.totalSize)}`}
             </p>
           </div>
           <button
             onClick={handleDeleteClick}
-            className="p-1.5 sm:p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
             title="Delete folder"
           >
             <Trash2 className="w-4 h-4 text-red-500" />
@@ -121,7 +120,7 @@ export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps
   return (
     <>
     <Card
-      className="flex flex-col cursor-pointer select-none group"
+      className="flex flex-col cursor-pointer select-none group border border-black/5 dark:border-white/[0.08] hover:border-amber-500/30 dark:hover:border-amber-500/30 transition-all"
       onClick={open}
       role="button"
       tabIndex={0}
@@ -132,24 +131,24 @@ export default function FolderCard({ prefix, variant = 'grid' }: FolderCardProps
         }
       }}
     >
-      <CardContent className="flex flex-col items-center justify-center relative p-1 sm:p-2">
-        <div className="w-full h-32 sm:h-44 bg-amber-50 dark:bg-amber-900/30 rounded-xl mb-2 sm:mb-3 flex flex-col items-center justify-center border border-black/5 dark:border-white/10 relative">
-          <Folder className="w-10 h-10 sm:w-12 sm:h-12 text-amber-500 dark:text-amber-400" />
-          <p className="absolute bottom-1.5 sm:bottom-2 left-0 right-0 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 text-center px-1 truncate">
+      <CardContent className="flex flex-col items-center justify-center relative p-1.5 sm:p-2">
+        <div className="w-full h-32 sm:h-44 bg-slate-100/70 dark:bg-slate-800/60 rounded-xl mb-2 sm:mb-3 flex flex-col items-center justify-center border border-black/5 dark:border-white/[0.08] group-hover:bg-amber-500/[0.08] dark:group-hover:bg-amber-500/[0.12] transition-colors relative">
+          <Folder className="w-10 h-10 sm:w-12 sm:h-12 text-amber-500 dark:text-amber-400 group-hover:scale-105 transition-transform duration-200" />
+          <p className="absolute bottom-1.5 sm:bottom-2 left-0 right-0 text-[10px] sm:text-xs text-gray-500 dark:text-slate-400 text-center px-1 truncate">
             {stats == null
-              ? "Getting..."
+              ? "Loading..."
               : `${formatFileCount(stats.count)} file${stats.count !== 1 ? "s" : ""} · ${formatBytes(stats.totalSize)}`}
           </p>
         </div>
-        <p className="text-xs sm:text-sm font-medium truncate w-full text-center text-gray-800 dark:text-gray-200 select-text">
+        <p className="text-xs sm:text-sm font-semibold truncate w-full text-center text-gray-800 dark:text-slate-100 select-text px-1">
           {name}
         </p>
         <button
           onClick={handleDeleteClick}
-          className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 p-1.5 sm:p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+          className="absolute top-2 right-2 p-1.5 sm:p-2 rounded-lg bg-black/20 hover:bg-red-500 text-white transition-colors opacity-0 group-hover:opacity-100 backdrop-blur-md"
           title="Delete folder"
         >
-          <Trash2 className="w-4 h-4 text-red-500" />
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </CardContent>
     </Card>

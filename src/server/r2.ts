@@ -1,4 +1,16 @@
-import { S3Client, ListObjectsV2Command, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, CopyObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectsCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const R2_ENDPOINT = `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`;
@@ -147,4 +159,71 @@ export async function objectExists(key: string): Promise<boolean> {
     if (err?.name === 'NotFound' || err?.Code === 'NotFound') return false;
     return false; // Default to not existing to be conservative for Phase 1
   }
+}
+
+/** Initiate an S3 multipart upload for large files (e.g. 2GB - 3GB+). */
+export async function createMultipartUpload(key: string, contentType?: string) {
+  const command = new CreateMultipartUploadCommand({
+    Bucket: process.env.CLOUDFLARE_BUCKETNAME!,
+    Key: key,
+    ContentType: contentType || 'application/octet-stream',
+  });
+  const res = await s3Client.send(command);
+  return { uploadId: res.UploadId, key: res.Key };
+}
+
+/** Upload a single part (chunk) in a multipart upload. */
+export async function uploadPart(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  body: Buffer | Uint8Array
+) {
+  const command = new UploadPartCommand({
+    Bucket: process.env.CLOUDFLARE_BUCKETNAME!,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+    Body: body,
+    ContentLength: body.length,
+  });
+  const res = await s3Client.send(command);
+  return {
+    partNumber,
+    etag: res.ETag,
+  };
+}
+
+/** Complete an S3 multipart upload with the collected parts. */
+export async function completeMultipartUpload(
+  key: string,
+  uploadId: string,
+  parts: { PartNumber: number; ETag: string }[]
+) {
+  const sortedParts = [...parts].sort((a, b) => a.PartNumber - b.PartNumber);
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: process.env.CLOUDFLARE_BUCKETNAME!,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: sortedParts,
+    },
+  });
+  const res = await s3Client.send(command);
+  return {
+    location: res.Location,
+    key: res.Key,
+    bucket: res.Bucket,
+    etag: res.ETag,
+  };
+}
+
+/** Abort an S3 multipart upload. */
+export async function abortMultipartUpload(key: string, uploadId: string) {
+  const command = new AbortMultipartUploadCommand({
+    Bucket: process.env.CLOUDFLARE_BUCKETNAME!,
+    Key: key,
+    UploadId: uploadId,
+  });
+  return s3Client.send(command);
 }

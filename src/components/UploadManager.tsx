@@ -26,7 +26,7 @@ export default function UploadManager() {
     : 0;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-auto sm:right-4 z-50 w-auto sm:w-[min(92vw,420px)] rounded-xl bg-white/90 dark:bg-gray-800/95 backdrop-blur border border-black/10 dark:border-white/10 shadow-xl">
+    <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-auto sm:right-4 z-50 w-auto sm:w-[min(92vw,420px)] rounded-2xl bg-white/95 dark:bg-[#161e31]/95 backdrop-blur-2xl border border-black/10 dark:border-white/[0.1] shadow-2xl shadow-black/50">
       <div className="px-4 py-3 flex items-start sm:items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-medium text-gray-800 dark:text-gray-100">Uploads Progress</div>

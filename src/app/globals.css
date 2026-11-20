@@ -28,24 +28,24 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
+    --background: 222 47% 11%; /* #0f172a slate-900 */
     --foreground: 210 40% 98%;
-    --card: 222 47% 14%;
+    --card: 217 33% 16%; /* #1e293b slate-800 */
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 14%;
+    --popover: 217 33% 16%;
     --popover-foreground: 210 40% 98%;
     --primary: 217 91% 60%;
     --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
+    --secondary: 217 33% 20%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
+    --muted: 217 33% 20%;
     --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
+    --accent: 217 33% 20%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 63% 51%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
     --ring: 217 91% 60%;
   }
 }
@@ -54,6 +54,20 @@
   .glass {
     @apply bg-white/70 backdrop-blur-2xl border border-black/5 shadow-[0_8px_24px_rgba(0,0,0,0.06)];
   }
+}
+
+/* Sileo Toast: Dark Theme Custom Overrides - luôn hiển thị toast dạng thẻ tối (dark card) */
+[data-sileo-canvas] path,
+[data-sileo-svg] path {
+  fill: #161e31 !important;
+}
+
+[data-sileo-toast] [data-sileo-title] {
+  color: #f8fafc !important;
+}
+
+[data-sileo-toast] [data-sileo-description] {
+  color: rgba(241, 245, 249, 0.9) !important;
 }
 
 /* Scrollbar tùy chỉnh: nhỏ gọn, hòa màu */

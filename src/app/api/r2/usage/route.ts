@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkApiAuth } from '@/server/auth';
 
 /**
  * Cloudflare R2 Bucket Usage API
@@ -6,11 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
  * Requires CLOUDFLARE_API_TOKEN (API Token với quyền R2 read, khác với S3 credentials)
  */
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('Authorization');
-  const expected = process.env.APP_PASSWORD || process.env.NEXT_PUBLIC_APP_PASSWORD;
-  if (expected && auth !== `Bearer ${expected}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const unauthorized = checkApiAuth(request);
+  if (unauthorized) return unauthorized;
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const bucketName = process.env.CLOUDFLARE_BUCKETNAME;

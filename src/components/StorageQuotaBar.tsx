@@ -56,18 +56,20 @@ export function StorageQuotaBar() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 min-w-[140px]">
-        <Database className="w-4 h-4 text-gray-400 dark:text-gray-500 animate-pulse" />
-        <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" />
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 dark:text-gray-500 animate-pulse shrink-0" />
+        <div className="w-16 sm:w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" />
       </div>
     );
   }
 
   if (error || !usage) {
     return (
-      <div className="flex items-center gap-2 min-w-[100px]" title={error || 'Không có dữ liệu'}>
-        <Database className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{error || '—'}</span>
+      <div className="flex items-center gap-1.5 shrink-0" title={error || 'Không có dữ liệu'}>
+        <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 dark:text-gray-500" />
+        <span className="text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">
+          {limitGb} GB
+        </span>
       </div>
     );
   }

@@ -27,7 +27,7 @@ export default function Home() {
     return () => window.removeEventListener('popstate', onPop);
   }, [setCurrentPrefix]);
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8F9FB] dark:bg-gray-900">
+    <div className="flex h-screen overflow-hidden bg-[#F8F9FB] dark:bg-[#0f172a] text-gray-900 dark:text-gray-100">
       <Sidebar />
       <main className="flex-1 flex flex-col min-w-0">
         <Header />
@@ -37,14 +37,14 @@ export default function Home() {
             <GalleryGrid />
           </div>
         </section>
-        <footer className="py-2 sm:py-3 px-4 border-t border-black/5 dark:border-white/10 flex justify-center">
+        <footer className="py-2.5 sm:py-3 px-4 border-t border-black/5 dark:border-white/[0.08] flex justify-center bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-sm">
           <a
             href="https://github.com/kunkeypr"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition"
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition font-medium"
           >
-            © 2026 - r2-cloudfalre-gui
+            © 2026 - Vũ Duy Lực
           </a>
         </footer>
         <UploadManager />

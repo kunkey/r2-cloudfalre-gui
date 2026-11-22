@@ -107,7 +107,16 @@ export function GalleryGrid() {
     return sorted;
   }, [objects, searchQuery, sortOrder, showOnlyUploaded, recentlyUploadedKeys]);
 
-  const orderedKeys = useMemo(() => filtered.map((o: any) => o.Key).filter(Boolean), [filtered]);
+  const orderedKeys = useMemo(() => {
+    const folderKeys = showOnlyUploaded
+      ? []
+      : prefixes.map((p) => {
+          const cleaned = p.replace(/^\/+/, '');
+          return cleaned.endsWith('/') ? cleaned : cleaned + '/';
+        });
+    const fileKeys = filtered.map((o: any) => o.Key).filter(Boolean);
+    return [...folderKeys, ...fileKeys];
+  }, [prefixes, filtered, showOnlyUploaded]);
 
   useEffect(() => {
     setDisplayOrderedKeys(orderedKeys);
@@ -177,7 +186,13 @@ export function GalleryGrid() {
       ) : viewMode === 'list' ? (
         <div className="flex flex-col gap-2">
           {!showOnlyUploaded && prefixes.map((p) => (
-            <FolderCard key={p} prefix={p.replace(/^\/+/, '')} variant="list" />
+            <FolderCard
+              key={p}
+              prefix={p.replace(/^\/+/, '')}
+              variant="list"
+              orderedKeys={orderedKeys}
+              onSelectRange={selectRange}
+            />
           ))}
           {filtered.map((object: any) => (
             <ItemCard key={object.Key} object={object} variant="list" orderedKeys={orderedKeys} onSelectRange={selectRange} />
@@ -186,7 +201,12 @@ export function GalleryGrid() {
       ) : (
         <div className="grid gap-4 sm:gap-5 grid-cols-2 md:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {!showOnlyUploaded && prefixes.map((p) => (
-            <FolderCard key={p} prefix={p.replace(/^\/+/, '')} />
+            <FolderCard
+              key={p}
+              prefix={p.replace(/^\/+/, '')}
+              orderedKeys={orderedKeys}
+              onSelectRange={selectRange}
+            />
           ))}
           {filtered.map((object: any) => (
             <ItemCard key={object.Key} object={object} orderedKeys={orderedKeys} onSelectRange={selectRange} />

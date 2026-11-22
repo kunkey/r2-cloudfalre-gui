@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Toast } from "./ui/Toast";
 import { toast } from "@/lib/toast";
 import { Card, CardContent, CardFooter } from "./ui/Card";
-import { Link2, Download, Trash2, Loader2 } from "lucide-react";
+import { Link2, Download, Trash2, Loader2, Check } from "lucide-react";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { useObjectStore } from "@/hooks/useObjectStore";
 import { buildPublicUrl } from "@/lib/public-url";
@@ -251,6 +251,26 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
     return <div className="text-sm text-gray-400">No preview</div>;
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    // Tổ hợp phím Ctrl (hoặc Cmd trên macOS): chọn hoặc bỏ chọn file
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelectWithAnchor(object.Key);
+      return;
+    }
+
+    // Tổ hợp phím Shift: chọn một dải file liên tiếp
+    if (e.shiftKey && orderedKeys.length > 0 && onSelectRange) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectRange(orderedKeys, object.Key);
+      return;
+    }
+
+    openFocus();
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (e.shiftKey && orderedKeys.length > 0 && onSelectRange) {
@@ -263,10 +283,12 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
   const listRow = (
     <>
       <Card
-        className={`flex flex-row items-center gap-2 sm:gap-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
-          isSelected ? "ring-2 ring-blue-500" : ""
+        className={`flex flex-row items-center gap-2 sm:gap-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all ${
+          isSelected
+            ? "ring-2 ring-amber-500 border-amber-500/80 bg-amber-500/[0.04] dark:bg-amber-500/[0.08]"
+            : ""
         }`}
-        onClick={() => openFocus()}
+        onClick={handleClick}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
@@ -281,6 +303,22 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
         }}
       >
         <CardContent className="flex flex-row items-center gap-2 sm:gap-3 w-full py-2 sm:py-3 px-2 sm:px-4">
+          {/* Checkbox chọn file trên List */}
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelectWithAnchor(object.Key);
+            }}
+            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+              isSelected
+                ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                : "border-black/20 dark:border-white/20 hover:border-amber-500 dark:hover:border-amber-400 bg-white dark:bg-slate-800 opacity-60 group-hover:opacity-100"
+            }`}
+            title={isSelected ? "Bỏ chọn" : "Chọn file"}
+          >
+            <Check className={`w-3.5 h-3.5 ${isSelected ? "opacity-100 stroke-[3]" : "opacity-0"}`} />
+          </div>
+
           <div
             className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
             ref={visibleRef}
@@ -339,10 +377,12 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
   return (
     <>
       <Card
-        className={`flex flex-col cursor-pointer select-none ${
-          isSelected ? "ring-2 ring-blue-500" : ""
+        className={`flex flex-col cursor-pointer select-none group relative transition-all ${
+          isSelected
+            ? "ring-2 ring-amber-500 border-amber-500/80 bg-amber-500/[0.04] dark:bg-amber-500/[0.08] shadow-md shadow-amber-500/10"
+            : ""
         }`}
-        onClick={() => openFocus()}
+        onClick={handleClick}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
@@ -357,6 +397,22 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
         }}
       >
         <CardContent className="flex flex-col items-center justify-center relative p-1 sm:p-2">
+          {/* Nút Checkbox chọn file ở góc trên bên trái */}
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelectWithAnchor(object.Key);
+            }}
+            className={`absolute top-2.5 left-2.5 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              isSelected
+                ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-100"
+                : "bg-black/25 hover:bg-black/45 text-white opacity-0 group-hover:opacity-100 backdrop-blur-md border border-white/20"
+            }`}
+            title={isSelected ? "Bỏ chọn" : "Chọn file"}
+          >
+            <Check className={`w-3.5 h-3.5 ${isSelected ? "opacity-100 stroke-[3]" : "opacity-0 group-hover:opacity-70"}`} />
+          </div>
+
           <div
             className="w-full h-32 sm:h-44 bg-gray-100 dark:bg-gray-700 rounded-xl mb-2 sm:mb-3 flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
             ref={visibleRef}

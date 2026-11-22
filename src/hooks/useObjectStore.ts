@@ -507,29 +507,81 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     const keys = get().selectedKeys;
     if (keys.length === 0) return;
     try {
-      const res = await fetch('/api/objects', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-        },
-        body: JSON.stringify({ keys }),
-      });
-      if (!res.ok) throw new Error('Bulk delete failed');
+      toast.info('Đang xóa...', `Đang xóa ${keys.length} mục đã chọn`);
 
-      const remaining = get().objects.filter((o: any) => !keys.includes(o.Key));
-      set({ objects: remaining, selectedKeys: [] });
+      const folderKeys = keys.filter((k) => k.endsWith('/'));
+      const fileKeys = keys.filter((k) => !k.endsWith('/'));
+
+      const deleteRequests: Promise<any>[] = [];
+
+      if (fileKeys.length > 0) {
+        deleteRequests.push(
+          fetch('/api/objects', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+            },
+            body: JSON.stringify({ keys: fileKeys }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(err?.error || 'Xóa file thất bại');
+            }
+          })
+        );
+      }
+
+      if (folderKeys.length > 0) {
+        deleteRequests.push(
+          fetch('/api/folders', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+            },
+            body: JSON.stringify({ prefixes: folderKeys }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(err?.error || 'Xóa thư mục thất bại');
+            }
+          })
+        );
+      }
+
+      await Promise.all(deleteRequests);
+
+      // Loại bỏ các file và folder đã xóa trực tiếp khỏi danh sách hiện tại (KHÔNG reload cả trang)
+      const deletedKeySet = new Set(keys);
+      const remainingObjects = get().objects.filter((o: any) => !deletedKeySet.has(o.Key));
+      const remainingPrefixes = get().prefixes.filter((p: string) => {
+        const norm = p.replace(/^\/+|\/+$/g, '') + '/';
+        return !deletedKeySet.has(p) && !deletedKeySet.has(norm);
+      });
+
+      set({
+        objects: remainingObjects,
+        prefixes: remainingPrefixes,
+        selectedKeys: [],
+        lastSelectedKey: null,
+      });
+
+      // Vô hiệu hóa cache của thư mục hiện tại để lần sau vào lại có dữ liệu mới
       invalidateFolderCache(get().currentPrefix);
-      toast.success('Deleted', `${keys.length} item(s) deleted successfully`);
-      await refreshCurrentPage();
+
+      toast.success('Đã xóa thành công', `Đã xóa ${keys.length} mục`);
     } catch (err: any) {
-      toast.error('Delete failed', err?.message || 'Could not delete selected items');
+      toast.error('Xóa thất bại', err?.message || 'Có lỗi xảy ra khi xóa');
     }
   },
 
   deleteOne: async (key: string) => {
     if (!key) return;
+    const filename = key.split('/').pop() || key;
     try {
+      toast.info('Đang xóa file...', filename);
+
       const res = await fetch('/api/objects', {
         method: 'DELETE',
         headers: {
@@ -538,22 +590,29 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
         },
         body: JSON.stringify({ keys: [key] }),
       });
-      if (!res.ok) throw new Error('Delete failed');
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err?.error || 'Xóa file thất bại');
+      }
 
+      // Loại bỏ file khỏi danh sách hiện tại ngay lập tức mà KHÔNG reload cả thư mục
       const remaining = get().objects.filter((o: any) => o.Key !== key);
       const remainingSelected = get().selectedKeys.filter((k) => k !== key);
       set({ objects: remaining, selectedKeys: remainingSelected });
+
       invalidateFolderCache(get().currentPrefix);
-      toast.success('Deleted', 'Item deleted successfully');
-      await refreshCurrentPage();
+      toast.success('Đã xóa thành công', filename);
     } catch (err: any) {
-      toast.error('Delete failed', err?.message || 'Could not delete item');
+      toast.error('Xóa thất bại', err?.message || 'Không thể xóa file');
     }
   },
 
   deleteFolder: async (prefix: string) => {
     if (!prefix) return;
+    const folderName = prefix.replace(/\/+$/, '').split('/').pop() || prefix;
     try {
+      toast.info('Đang xóa thư mục...', folderName);
+
       const res = await fetch('/api/folders', {
         method: 'DELETE',
         headers: {
@@ -563,20 +622,38 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
         body: JSON.stringify({ prefix }),
       });
       if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        throw new Error(err?.error || 'Failed to delete folder');
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err?.error || 'Xóa thư mục thất bại');
       }
+
+      // Loại bỏ thư mục khỏi prefixes hiện tại mà KHÔNG reload cả thư mục
+      const norm = prefix.replace(/^\/+|\/+$/g, '') + '/';
+      const remainingPrefixes = get().prefixes.filter((p: string) => {
+        const np = p.replace(/^\/+|\/+$/g, '') + '/';
+        return np !== norm;
+      });
+      const remainingSelected = get().selectedKeys.filter((k) => {
+        const nk = k.replace(/^\/+|\/+$/g, '') + '/';
+        return nk !== norm;
+      });
+      set({ prefixes: remainingPrefixes, selectedKeys: remainingSelected });
+
       invalidateFolderCache(prefix);
-      toast.success('Folder deleted', `Folder "${prefix}" deleted successfully`);
-      await get().fetchObjects(true);
+      toast.success('Đã xóa thư mục', `Thư mục "${folderName}" đã được xóa`);
     } catch (err: any) {
-      toast.error('Delete failed', err?.message || 'Could not delete folder');
+      toast.error('Xóa thư mục thất bại', err?.message || 'Không thể xóa thư mục');
     }
   },
 
   bulkDownload: async () => {
     const keys = get().selectedKeys;
-    if (keys.length === 0) return;
+    const fileKeys = keys.filter((k) => !k.endsWith('/'));
+    if (fileKeys.length === 0) {
+      if (keys.length > 0) {
+        toast.info('Tải về', 'Chỉ hỗ trợ tải về trực tiếp đối với file');
+      }
+      return;
+    }
     try {
       const res = await fetch('/api/download', {
         method: 'POST',
@@ -584,7 +661,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
         },
-        body: JSON.stringify({ keys }),
+        body: JSON.stringify({ keys: fileKeys }),
       });
       const { links } = (await res.json()) as { links?: string[] };
       (links || []).forEach((url: string) => {
@@ -596,7 +673,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
         a.click();
         a.remove();
       });
-      toast.info('Downloading', `Starting download for ${keys.length} item(s)`);
+      toast.info('Downloading', `Starting download for ${fileKeys.length} file(s)`);
     } catch (err: any) {
       toast.error('Download failed', err?.message);
     }
@@ -604,7 +681,13 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
 
   bulkCopyLinks: async () => {
     const keys = get().selectedKeys;
-    if (keys.length === 0) return;
+    const fileKeys = keys.filter((k) => !k.endsWith('/'));
+    if (fileKeys.length === 0) {
+      if (keys.length > 0) {
+        toast.info('Sao chép link', 'Chỉ hỗ trợ sao chép public link đối với file');
+      }
+      return;
+    }
     try {
       const res = await fetch('/api/download', {
         method: 'POST',
@@ -612,7 +695,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
         },
-        body: JSON.stringify({ keys }),
+        body: JSON.stringify({ keys: fileKeys }),
       });
       const { links } = (await res.json()) as { links?: string[] };
       set({ linksModalOpen: true, modalLinks: links || [] });

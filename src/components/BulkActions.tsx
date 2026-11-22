@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useObjectStore } from '@/hooks/useObjectStore';
+import { useObjectStore, invalidateFolderCache } from '@/hooks/useObjectStore';
 import { Button } from './ui/Button';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { StorageQuotaBar } from './StorageQuotaBar';
-import { ArrowLeft, Home, Folder, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Home, Folder, ChevronRight, RefreshCw, Copy, Check } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 export function BulkActions() {
   const {
@@ -21,10 +22,13 @@ export function BulkActions() {
     setCurrentPrefix,
     showOnlyUploaded,
     setShowOnlyUploaded,
+    fetchObjects,
   } = useObjectStore();
 
   const hasSelection = selectedKeys.length > 0;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
 
   const breadcrumbs = (() => {
     const p = (currentPrefix || '').replace(/^\/+|\/+$/g, '');
@@ -42,6 +46,32 @@ export function BulkActions() {
     setCurrentPrefix(normalized);
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      invalidateFolderCache(currentPrefix);
+      toast.info('Đang làm mới thư mục...');
+      await fetchObjects(true);
+      toast.success('Đã làm mới dữ liệu');
+    } catch (e: any) {
+      toast.error('Làm mới thất bại', e?.message);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleCopyBreadcrumbPath = async () => {
+    const path = currentPrefix || '/';
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopiedPath(true);
+      toast.success('Đã sao chép đường dẫn', path);
+      setTimeout(() => setCopiedPath(false), 2000);
+    } catch {
+      toast.error('Không thể sao chép đường dẫn');
+    }
+  };
+
   return (
     <div className="bg-white/80 dark:bg-[#0f172a]/85 backdrop-blur-md border-b border-black/5 dark:border-white/[0.08] transition-colors">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -56,7 +86,7 @@ export function BulkActions() {
           </div>
         )}
 
-        {/* Breadcrumb — cuộn ngang trên mobile */}
+        {/* Breadcrumb — cuộn ngang trên mobile kèm icon sao chép đường dẫn */}
         <div className="flex items-center gap-1.5 py-2 overflow-x-auto flex-nowrap scrollbar-thin">
           <button
             onClick={() => navigateTo('')}
@@ -82,6 +112,26 @@ export function BulkActions() {
               </span>
             );
           })}
+
+          {/* Nút sao chép đường dẫn thư mục hiện tại */}
+          <button
+            type="button"
+            onClick={handleCopyBreadcrumbPath}
+            className="cursor-pointer flex items-center gap-1 px-2 py-1 ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.06] text-gray-500 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200 transition shrink-0 border border-transparent hover:border-black/5 dark:hover:border-white/10"
+            title="Sao chép đường dẫn thư mục hiện tại"
+          >
+            {copiedPath ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="text-xs text-emerald-500 font-medium">Đã chép</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-gray-500 dark:text-slate-400 shrink-0" />
+                <span className="text-xs font-medium hidden sm:inline">Copy path</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Thanh công cụ: cân bằng hai bên, không bao giờ bị đè hay tràn trên mobile */}
@@ -143,7 +193,7 @@ export function BulkActions() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 ml-auto">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
             {/* Bộ chọn số item/trang — chỉ hiện trên sm trở lên */}
             <div className="hidden sm:flex items-center gap-2">
               <label className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">Show</label>
@@ -164,6 +214,18 @@ export function BulkActions() {
               </select>
             </div>
 
+            {/* Nút Làm mới (Refresh) đặt cạnh Show */}
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="gap-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-600 dark:text-slate-300 border-black/5 dark:border-white/[0.08] transition rounded-xl text-xs sm:text-sm py-1.5 px-2.5 sm:py-2 sm:px-3 shrink-0"
+              title="Làm mới danh sách (tải lại dữ liệu mới nhất từ R2)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Làm mới</span>
+            </Button>
+
             <StorageQuotaBar />
           </div>
         </div>
@@ -173,8 +235,8 @@ export function BulkActions() {
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={bulkDelete}
-        title="Delete multiple files"
-        message={`Delete ${selectedKeys.length.toLocaleString('de-DE')} selected files? This action cannot be undone.`}
+        title="Delete multiple items"
+        message={`Delete ${selectedKeys.length.toLocaleString('de-DE')} selected item(s)? This action cannot be undone.`}
       />
     </div>
   );

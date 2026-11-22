@@ -2,6 +2,9 @@
 
 module.exports = {
     poweredByHeader: false,
+    experimental: {
+        proxyClientMaxBodySize: '4096mb',
+    },
     headers: async () => [
         {
             source: "/(.*)",

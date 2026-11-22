@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Toast } from "./ui/Toast";
+import { toast } from "@/lib/toast";
 import { Card, CardContent, CardFooter } from "./ui/Card";
-import { Link2, Download, Trash2, Loader2 } from "lucide-react";
+import { Link2, Download, Trash2, Loader2, Check } from "lucide-react";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 import moment from "moment";
 import { filesize } from "filesize";
 
@@ -104,8 +106,8 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
-            setImageUrl(link ?? null);
+            const link = buildPublicUrl(object.Key || "");
+            setImageUrl(link);
           }
         }
 
@@ -143,9 +145,10 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
 
   const copyLink = async () => {
     try {
-      const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${object.Key}`;
+      const link = buildPublicUrl(object.Key || "");
       if (link) {
-        navigator.clipboard.writeText(link);
+        await navigator.clipboard.writeText(link);
+        toast.success("Link copied", object.Key);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
@@ -248,6 +251,26 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
     return <div className="text-sm text-gray-400">No preview</div>;
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    // Tổ hợp phím Ctrl (hoặc Cmd trên macOS): chọn hoặc bỏ chọn file
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelectWithAnchor(object.Key);
+      return;
+    }
+
+    // Tổ hợp phím Shift: chọn một dải file liên tiếp
+    if (e.shiftKey && orderedKeys.length > 0 && onSelectRange) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectRange(orderedKeys, object.Key);
+      return;
+    }
+
+    openFocus();
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (e.shiftKey && orderedKeys.length > 0 && onSelectRange) {
@@ -260,10 +283,12 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
   const listRow = (
     <>
       <Card
-        className={`flex flex-row items-center gap-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
-          isSelected ? "ring-2 ring-blue-500" : ""
+        className={`flex flex-row items-center gap-2 sm:gap-3 cursor-pointer select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all ${
+          isSelected
+            ? "ring-2 ring-amber-500 border-amber-500/80 bg-amber-500/[0.04] dark:bg-amber-500/[0.08]"
+            : ""
         }`}
-        onClick={() => openFocus()}
+        onClick={handleClick}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
@@ -277,39 +302,56 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
           }
         }}
       >
-        <CardContent className="flex flex-row items-center gap-3 w-full py-3 px-4">
+        <CardContent className="flex flex-row items-center gap-2 sm:gap-3 w-full py-2 sm:py-3 px-2 sm:px-4">
+          {/* Checkbox chọn file trên List */}
           <div
-            className="w-12 h-12 shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelectWithAnchor(object.Key);
+            }}
+            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+              isSelected
+                ? "bg-amber-500 border-amber-500 text-white shadow-sm"
+                : "border-black/20 dark:border-white/20 hover:border-amber-500 dark:hover:border-amber-400 bg-white dark:bg-slate-800 opacity-60 group-hover:opacity-100"
+            }`}
+            title={isSelected ? "Bỏ chọn" : "Chọn file"}
+          >
+            <Check className={`w-3.5 h-3.5 ${isSelected ? "opacity-100 stroke-[3]" : "opacity-0"}`} />
+          </div>
+
+          <div
+            className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
             ref={visibleRef}
           >
             {renderPreview(true)}
           </div>
           <div className="flex-1 min-w-0 flex flex-col">
-            <p className="text-sm font-medium truncate text-gray-800 dark:text-gray-200 select-text">
+            <p className="text-xs sm:text-sm font-medium truncate text-gray-800 dark:text-gray-200 select-text">
               {object.Key?.split("/").pop() || object.Key}
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
               {object?.LastModified ? moment(object.LastModified).format("MM/DD/YYYY HH:mm") : ""} • {filesize(object.Size)}
             </p>
           </div>
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {/* Nút hành động — mobile: hiện luôn; desktop: hiện khi hover */}
+          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={(e) => { e.stopPropagation(); copyLink(); }}
-              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              className="p-1.5 sm:p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Copy Link"
             >
               <Link2 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); downloadFile(); }}
-              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              className="hidden sm:block p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Download"
             >
               <Download className="w-4 h-4 text-gray-600 dark:text-gray-300" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); deleteFile(); }}
-              className="p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
+              className="p-1.5 sm:p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
               title="Delete"
             >
               <Trash2 className="w-4 h-4 text-red-500" />
@@ -335,10 +377,12 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
   return (
     <>
       <Card
-        className={`flex flex-col cursor-pointer select-none ${
-          isSelected ? "ring-2 ring-blue-500" : ""
+        className={`flex flex-col cursor-pointer select-none group relative transition-all ${
+          isSelected
+            ? "ring-2 ring-amber-500 border-amber-500/80 bg-amber-500/[0.04] dark:bg-amber-500/[0.08] shadow-md shadow-amber-500/10"
+            : ""
         }`}
-        onClick={() => openFocus()}
+        onClick={handleClick}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
@@ -352,15 +396,31 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
           }
         }}
       >
-        <CardContent className="flex flex-col items-center justify-center relative">
+        <CardContent className="flex flex-col items-center justify-center relative p-1 sm:p-2">
+          {/* Nút Checkbox chọn file ở góc trên bên trái */}
           <div
-            className="w-full h-44 bg-gray-100 dark:bg-gray-700 rounded-xl mb-3 flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelectWithAnchor(object.Key);
+            }}
+            className={`absolute top-2.5 left-2.5 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              isSelected
+                ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 scale-100"
+                : "bg-black/25 hover:bg-black/45 text-white opacity-0 group-hover:opacity-100 backdrop-blur-md border border-white/20"
+            }`}
+            title={isSelected ? "Bỏ chọn" : "Chọn file"}
+          >
+            <Check className={`w-3.5 h-3.5 ${isSelected ? "opacity-100 stroke-[3]" : "opacity-0 group-hover:opacity-70"}`} />
+          </div>
+
+          <div
+            className="w-full h-32 sm:h-44 bg-gray-100 dark:bg-gray-700 rounded-xl mb-2 sm:mb-3 flex items-center justify-center overflow-hidden border border-black/5 dark:border-white/10"
             ref={visibleRef}
           >
             {renderPreview()}
           </div>
           <p
-            className="text-sm font-medium truncate w-full text-center text-gray-800 dark:text-gray-200 select-text"
+            className="text-xs sm:text-sm font-medium truncate w-full text-center text-gray-800 dark:text-gray-200 select-text"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -368,13 +428,13 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
           </p>
         </CardContent>
         <CardFooter className="pt-0">
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-0.5 sm:gap-1.5">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 copyLink();
               }}
-              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              className="p-1.5 sm:p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Copy Link"
             >
               <Link2 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
@@ -384,7 +444,7 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
                 e.stopPropagation();
                 downloadFile();
               }}
-              className="p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
+              className="hidden sm:block p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-gray-600/70 transition-colors"
               title="Download"
             >
               <Download className="w-4 h-4 text-gray-600 dark:text-gray-300" />
@@ -394,7 +454,7 @@ export function ItemCard({ object, variant = 'grid', orderedKeys = [], onSelectR
                 e.stopPropagation();
                 deleteFile();
               }}
-              className="p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
+              className="p-1.5 sm:p-2 rounded-md hover:bg-red-100/70 dark:hover:bg-red-900/30 transition-colors"
               title="Delete"
             >
               <Trash2 className="w-4 h-4 text-red-500" />

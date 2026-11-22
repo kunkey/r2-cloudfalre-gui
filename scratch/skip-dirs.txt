@@ -1,0 +1,10 @@
+# skip-dirs.txt — những thư mục KHÔNG đụng chạm trong cleanup
+# Mỗi dòng = 1 prefix (dùng / kết thúc)
+# File trong các thư mục này sẽ được BỎ QUA hoàn toàn (không xóa, không đưa vào candidates)
+
+Images/Users/
+Images/Shop-Ma-Nguon/
+Images/Ads/
+Images/Comments/
+Videos/
+MainTaince/

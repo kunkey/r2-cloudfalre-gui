@@ -1,17 +1,31 @@
 import { create } from 'zustand';
+import { toast } from '@/lib/toast';
 
 interface ObjectState {
   objects: any[];
   prefixes: string[]; // folder names (CommonPrefixes)
   selectedKeys: string[];
   searchQuery: string;
-  gridLimit: number;
+  gridLimit: number; // số item mỗi trang
   currentPrefix: string; // path we are viewing
-  fetchObjects: () => Promise<void>;
-  loadMoreObjects: () => Promise<void>;
+
+  // ─── Pagination ───
+  page: number; // trang hiện tại (1-based)
+  totalPages: number; // số trang đã biết (>= page)
+  isLastPage: boolean; // true khi đã biết chính xác trang cuối
+  hasMore: boolean; // còn trang kế tiếp không
+  totalCount: number | null; // tổng số object (null = chưa biết)
+  searchResultCount: number; // tổng kết quả tìm kiếm (nếu đang search)
+
+  fetchObjects: (forceRefresh?: boolean) => Promise<void>;
+  goToPage: (page: number) => Promise<void>;
+  nextPage: () => Promise<void>;
+  prevPage: () => Promise<void>;
+  firstPage: () => Promise<void>;
+  lastPage: () => Promise<void>;
+
   isLoading: boolean;
   isLoadingMore: boolean;
-  hasMore: boolean;
   toggleSelect: (key: string) => void;
   toggleSelectWithAnchor: (key: string) => void;
   selectRange: (orderedKeys: string[], endKey: string) => void;
@@ -38,7 +52,7 @@ interface ObjectState {
   // Upload management
   uploadOpen: boolean;
   uploadTasks: UploadTask[];
-  startDnDUpload: (entries: { file: File; relativePath: string }[], dirPaths: string[]) => Promise<void>;
+  startDnDUpload: (entries: { file: File; relativePath: string }[], dirPaths?: string[]) => Promise<void>;
   addFolderPickerUploads: (entries: { file: File; relativePath: string }[]) => Promise<void>;
   cancelAllUploads: () => void;
   retryFailed: () => void;
@@ -67,6 +81,150 @@ export interface UploadTask {
   error?: string;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Cache thư mục đa cấp (hỗ trợ back/forward tức thì mà không cần fetch lại API)
+// ───────────────────────────────────────────────────────────────────────────
+
+interface PageData {
+  objects: any[];
+  prefixes: string[];
+  isTruncated: boolean;
+}
+
+interface FolderCacheEntry {
+  pages: Map<number, PageData>;
+  tokens: string[];
+  totalCount: number | null;
+  totalPages: number;
+  timestamp: number;
+}
+
+const _folderCache = new Map<string, FolderCacheEntry>();
+
+function getFolderCacheKey(prefix: string, size: number): string {
+  return `${prefix}|${size}`;
+}
+
+function getCachedFolder(prefix: string, size: number): FolderCacheEntry {
+  const key = getFolderCacheKey(prefix, size);
+  let entry = _folderCache.get(key);
+  if (!entry) {
+    entry = {
+      pages: new Map<number, PageData>(),
+      tokens: [],
+      totalCount: null,
+      totalPages: 1,
+      timestamp: Date.now(),
+    };
+    _folderCache.set(key, entry);
+  }
+  return entry;
+}
+
+/**
+ * Xóa cache thư mục khi có mutation (tạo folder, xóa file/folder, upload file, import URL).
+ * Nếu không truyền prefix: xóa toàn bộ cache.
+ * Nếu truyền prefix: xóa cache của thư mục đó và các thư mục liên quan.
+ */
+export function invalidateFolderCache(prefix?: string) {
+  if (prefix === undefined) {
+    _folderCache.clear();
+    _searchResults = null;
+    _searchTerm = '';
+    return;
+  }
+  const normalized = prefix.replace(/^\/+|\/+$/g, '');
+  for (const key of Array.from(_folderCache.keys())) {
+    const [p] = key.split('|');
+    const normP = p.replace(/^\/+|\/+$/g, '');
+    if (normP === normalized || normP.startsWith(normalized) || normalized.startsWith(normP)) {
+      _folderCache.delete(key);
+    }
+  }
+  _searchResults = null;
+  _searchTerm = '';
+}
+
+/** Kết quả tìm kiếm đã tải về (phân trang client-side) */
+let _searchResults: any[] | null = null;
+let _searchTerm = '';
+let _searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Đếm tổng số object của prefix (lưu trong folder cache). */
+async function fetchTotalCount(prefix: string, size: number): Promise<number | null> {
+  const entry = getCachedFolder(prefix, size);
+  if (entry.totalCount !== null) return entry.totalCount;
+
+  try {
+    const q = new URLSearchParams();
+    if (prefix) q.set('prefix', prefix);
+    const res = await fetch(`/api/objects/count?${q.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { count?: number };
+    const count = typeof data.count === 'number' ? data.count : null;
+    entry.totalCount = count;
+    return count;
+  } catch {
+    return null;
+  }
+}
+
+/** Tải 1 trang từ server (hoặc lấy từ cache thư mục). p là 1-based. */
+async function fetchPageData(p: number, prefix: string, size: number): Promise<PageData> {
+  const entry = getCachedFolder(prefix, size);
+  const cached = entry.pages.get(p);
+  if (cached) return cached;
+
+  const token = p >= 2 ? entry.tokens[p - 2] : undefined;
+  const q = new URLSearchParams();
+  q.set('limit', String(size));
+  if (prefix) q.set('prefix', prefix);
+  if (token) q.set('continuationToken', token);
+
+  const res = await fetch(`/api/objects?${q.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+    },
+  });
+  const data = (await res.json()) as any;
+
+  const pd: PageData = {
+    objects: data.Contents || [],
+    prefixes: (data.CommonPrefixes || []).map((item: any) => item.Prefix).filter(Boolean),
+    isTruncated: Boolean(data.IsTruncated && data.NextContinuationToken),
+  };
+
+  entry.pages.set(p, pd);
+  if (pd.isTruncated) entry.tokens[p - 1] = data.NextContinuationToken;
+  return pd;
+}
+
+/** Tải kết quả tìm kiếm (1 lần, phân trang client-side). */
+async function loadSearchResults(term: string, scopePrefix: string): Promise<any[]> {
+  const cacheKey = `${scopePrefix}|${term}`;
+  if (_searchTerm === cacheKey && _searchResults) return _searchResults;
+  const res = await fetch(
+    `/api/objects/search?q=${encodeURIComponent(term)}&limit=5000`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+    },
+  );
+  const data = (await res.json()) as any;
+  let results: any[] = data.Contents || [];
+  if (scopePrefix) {
+    results = results.filter((o: any) => (o.Key || '').startsWith(scopePrefix));
+  }
+  _searchResults = results;
+  _searchTerm = cacheKey;
+  return results;
+}
+
 export const useObjectStore = create<ObjectState>((set, get) => ({
   objects: [],
   prefixes: [],
@@ -91,59 +249,155 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   isLoadingMore: false,
   hasMore: false,
 
-  fetchObjects: async () => {
-    const limit = get().gridLimit;
-    const prefix = get().currentPrefix;
-    set({ isLoading: true, hasMore: false });
-    const q = new URLSearchParams();
-    q.set('limit', String(limit));
-    if (prefix) q.set('prefix', prefix);
-    const res = await fetch(`/api/objects?${q.toString()}` , {
-      headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-    });
-    const data = (await res.json()) as any;
-    set({ 
-      objects: data.Contents || [],
-      prefixes: (data.CommonPrefixes || []).map((p: any) => p.Prefix).filter(Boolean),
-      isLoading: false,
-      hasMore: Boolean(data.IsTruncated && data.NextContinuationToken),
-    });
-    // Stash continuation token in a module-scoped place via closure
-    (useObjectStore as any)._nextToken = data.NextContinuationToken || undefined;
+  // ─── Pagination ───
+  page: 1,
+  totalPages: 1,
+  isLastPage: false,
+  totalCount: null,
+  searchResultCount: 0,
+
+  /**
+   * Nạp lại trang. Nếu forceRefresh=true (sau khi upload, delete, create folder):
+   * xóa cache thư mục để lấy dữ liệu mới nhất.
+   */
+  fetchObjects: async (forceRefresh = false) => {
+    if (forceRefresh) {
+      invalidateFolderCache(get().currentPrefix);
+    }
+    await get().goToPage(1);
   },
 
-  loadMoreObjects: async () => {
-    if (get().isLoadingMore || !get().hasMore) return;
-    const limit = get().gridLimit;
-    const prefix = get().currentPrefix;
-    const token = (useObjectStore as any)._nextToken as string | undefined;
-    if (!token) return;
-    set({ isLoadingMore: true });
-    const q = new URLSearchParams();
-    q.set('limit', String(limit));
-    if (prefix) q.set('prefix', prefix);
-    q.set('continuationToken', token);
-    const res = await fetch(`/api/objects?${q.toString()}` , {
-      headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-    });
-    const data = (await res.json()) as any;
-    set((state) => ({
-      objects: [...(state.objects || []), ...(data.Contents || [])],
-      // prefixes only matter from the first page; keep as-is
-      isLoadingMore: false,
-      hasMore: Boolean(data.IsTruncated && data.NextContinuationToken),
-    }));
-    (useObjectStore as any)._nextToken = data.NextContinuationToken || undefined;
+  goToPage: async (target: number) => {
+    const state = get();
+    const size = state.gridLimit;
+    const prefix = state.currentPrefix;
+    const term = (state.searchQuery || '').trim().toLowerCase();
+
+    // ── Chế độ tìm kiếm: tải 1 lần, phân trang client-side ──
+    if (term) {
+      set({ isLoading: true });
+      try {
+        const results = await loadSearchResults(term, prefix);
+        const totalPages = Math.max(1, Math.ceil(results.length / size));
+        const p = Math.min(Math.max(1, target), totalPages);
+        const start = (p - 1) * size;
+        set({
+          objects: results.slice(start, start + size),
+          prefixes: [],
+          page: p,
+          totalPages,
+          isLastPage: true,
+          hasMore: p < totalPages,
+          totalCount: results.length,
+          searchResultCount: results.length,
+          isLoading: false,
+        });
+      } catch {
+        set({ isLoading: false, objects: [], prefixes: [], page: 1, totalPages: 1, isLastPage: true, hasMore: false, totalCount: 0, searchResultCount: 0 });
+      }
+      return;
+    }
+
+    // ── Chế độ danh sách thư mục (có cache đa cấp) ──
+    const p = Math.max(1, target);
+    const entry = getCachedFolder(prefix, size);
+
+    // Kiểm tra nếu dữ liệu trang này đã có sẵn trong cache
+    if (entry.pages.has(p)) {
+      const pd = entry.pages.get(p)!;
+      const total = entry.totalCount;
+      const nextExists = pd.isTruncated;
+      const totalPages = total !== null
+        ? Math.max(1, Math.ceil(total / size))
+        : (nextExists ? Math.max(p + 1, entry.totalPages) : p);
+
+      set({
+        objects: pd.objects,
+        prefixes: pd.prefixes,
+        page: p,
+        totalPages,
+        isLastPage: total !== null ? p >= Math.ceil(total / size) : !nextExists,
+        hasMore: total !== null ? p < Math.ceil(total / size) : nextExists,
+        totalCount: total,
+        searchResultCount: 0,
+        isLoading: false,
+      });
+      return;
+    }
+
+    // Nếu chưa có trong cache: hiển thị loading và fetch tuần tự
+    set({ isLoading: true });
+
+    try {
+      for (let i = 1; i <= p; i++) {
+        await fetchPageData(i, prefix, size);
+      }
+
+      const pd = entry.pages.get(p)!;
+
+      let nextExists = false;
+      if (pd.isTruncated) {
+        try {
+          const next = await fetchPageData(p + 1, prefix, size);
+          nextExists = next.isTruncated || next.objects.length > 0;
+        } catch {
+          nextExists = true;
+        }
+      }
+
+      const total = await fetchTotalCount(prefix, size);
+      const computedTotalPages = total !== null
+        ? Math.max(1, Math.ceil(total / size))
+        : (nextExists ? Math.max(p + 1, get().totalPages) : p);
+
+      entry.totalPages = computedTotalPages;
+
+      set({
+        objects: pd.objects,
+        prefixes: pd.prefixes,
+        page: p,
+        totalPages: computedTotalPages,
+        isLastPage: total !== null ? p >= Math.ceil(total / size) : !nextExists,
+        hasMore: total !== null ? p < Math.ceil(total / size) : nextExists,
+        totalCount: total,
+        searchResultCount: 0,
+        isLoading: false,
+      });
+    } catch (err) {
+      console.error('goToPage failed:', err);
+      set({ isLoading: false });
+    }
   },
 
-  setSearchQuery: (q: string) => set({ searchQuery: q }),
-  setGridLimit: (n: number) => set({ gridLimit: n }),
+  nextPage: async () => {
+    const { page, hasMore, totalPages } = get();
+    if (!hasMore && page >= totalPages) return;
+    await get().goToPage(page + 1);
+  },
+  prevPage: async () => {
+    const { page } = get();
+    if (page <= 1) return;
+    await get().goToPage(page - 1);
+  },
+  firstPage: async () => get().goToPage(1),
+  lastPage: async () => get().goToPage(get().totalPages),
+
+  setSearchQuery: (q: string) => {
+    set({ searchQuery: q });
+    if (_searchTimer) clearTimeout(_searchTimer);
+    set({ isLoading: true });
+    _searchTimer = setTimeout(() => {
+      void get().goToPage(1);
+    }, 350);
+  },
+  setGridLimit: (n: number) => {
+    set({ gridLimit: n });
+    void get().fetchObjects(true);
+  },
   setCurrentPrefix: (p: string) => {
     const next = p.replace(/^\/+|\/+$/g, '') ? p.replace(/^\/+|\/+$/g, '') + '/' : '';
+    _searchResults = null;
+    _searchTerm = '';
     set({ currentPrefix: next, selectedKeys: [], lastSelectedKey: null });
   },
   setViewMode: (m: 'grid' | 'list') => set({ viewMode: m }),
@@ -151,7 +405,7 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   goUp: () => {
     const cur = get().currentPrefix;
     if (!cur) return;
-    const parts = cur.replace(/\/+$/,'').split('/');
+    const parts = cur.replace(/\/+$/, '').split('/');
     parts.pop();
     const parent = parts.join('/');
     set({ currentPrefix: parent ? parent + '/' : '' });
@@ -170,9 +424,12 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     if (!res.ok) {
       let message = 'Failed to create folder';
       try { const err = (await res.json()) as { error?: string }; if (err?.error) message = err.error; } catch {}
+      toast.error('Failed to create folder', message);
       throw new Error(message);
     }
-    await get().fetchObjects();
+    invalidateFolderCache(parentPrefix);
+    toast.success('Folder created', `Folder "${name}" was created successfully`);
+    await get().fetchObjects(true);
   },
 
   // Uploads
@@ -186,8 +443,11 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
     abortAll();
     fileBlobs.clear();
     set((state) => ({
-      uploadTasks: state.uploadTasks.map((t) => ({ ...t, status: t.status === 'done' ? t.status : 'canceled' })),
+      uploadTasks: state.uploadTasks.map((t) =>
+        t.status === 'done' ? t : { ...t, status: 'canceled' as UploadStatus }
+      ),
     }));
+    toast.info('Uploads canceled');
   },
   retryFailed: () => {
     const tasks = get().uploadTasks;
@@ -246,95 +506,229 @@ export const useObjectStore = create<ObjectState>((set, get) => ({
   bulkDelete: async () => {
     const keys = get().selectedKeys;
     if (keys.length === 0) return;
-    await fetch('/api/objects', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-      body: JSON.stringify({ keys }),
-    });
-    // Optimistically remove deleted keys from local objects
-    const remaining = get().objects.filter((o: any) => !keys.includes(o.Key));
-    set({ objects: remaining, selectedKeys: [] });
+    try {
+      toast.info('Đang xóa...', `Đang xóa ${keys.length} mục đã chọn`);
+
+      const folderKeys = keys.filter((k) => k.endsWith('/'));
+      const fileKeys = keys.filter((k) => !k.endsWith('/'));
+
+      const deleteRequests: Promise<any>[] = [];
+
+      if (fileKeys.length > 0) {
+        deleteRequests.push(
+          fetch('/api/objects', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+            },
+            body: JSON.stringify({ keys: fileKeys }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(err?.error || 'Xóa file thất bại');
+            }
+          })
+        );
+      }
+
+      if (folderKeys.length > 0) {
+        deleteRequests.push(
+          fetch('/api/folders', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+            },
+            body: JSON.stringify({ prefixes: folderKeys }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const err = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(err?.error || 'Xóa thư mục thất bại');
+            }
+          })
+        );
+      }
+
+      await Promise.all(deleteRequests);
+
+      // Loại bỏ các file và folder đã xóa trực tiếp khỏi danh sách hiện tại (KHÔNG reload cả trang)
+      const deletedKeySet = new Set(keys);
+      const remainingObjects = get().objects.filter((o: any) => !deletedKeySet.has(o.Key));
+      const remainingPrefixes = get().prefixes.filter((p: string) => {
+        const norm = p.replace(/^\/+|\/+$/g, '') + '/';
+        return !deletedKeySet.has(p) && !deletedKeySet.has(norm);
+      });
+
+      set({
+        objects: remainingObjects,
+        prefixes: remainingPrefixes,
+        selectedKeys: [],
+        lastSelectedKey: null,
+      });
+
+      // Vô hiệu hóa cache của thư mục hiện tại để lần sau vào lại có dữ liệu mới
+      invalidateFolderCache(get().currentPrefix);
+
+      toast.success('Đã xóa thành công', `Đã xóa ${keys.length} mục`);
+    } catch (err: any) {
+      toast.error('Xóa thất bại', err?.message || 'Có lỗi xảy ra khi xóa');
+    }
   },
 
   deleteOne: async (key: string) => {
     if (!key) return;
-    await fetch('/api/objects', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-      body: JSON.stringify({ keys: [key] }),
-    });
-    const remaining = get().objects.filter((o: any) => o.Key !== key);
-    const remainingSelected = get().selectedKeys.filter((k) => k !== key);
-    set({ objects: remaining, selectedKeys: remainingSelected });
+    const filename = key.split('/').pop() || key;
+    try {
+      toast.info('Đang xóa file...', filename);
+
+      const res = await fetch('/api/objects', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        },
+        body: JSON.stringify({ keys: [key] }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err?.error || 'Xóa file thất bại');
+      }
+
+      // Loại bỏ file khỏi danh sách hiện tại ngay lập tức mà KHÔNG reload cả thư mục
+      const remaining = get().objects.filter((o: any) => o.Key !== key);
+      const remainingSelected = get().selectedKeys.filter((k) => k !== key);
+      set({ objects: remaining, selectedKeys: remainingSelected });
+
+      invalidateFolderCache(get().currentPrefix);
+      toast.success('Đã xóa thành công', filename);
+    } catch (err: any) {
+      toast.error('Xóa thất bại', err?.message || 'Không thể xóa file');
+    }
   },
 
   deleteFolder: async (prefix: string) => {
     if (!prefix) return;
-    const res = await fetch('/api/folders', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-      body: JSON.stringify({ prefix }),
-    });
-    if (!res.ok) {
-      const err = (await res.json()) as { error?: string };
-      throw new Error(err?.error || 'Failed to delete folder');
+    const folderName = prefix.replace(/\/+$/, '').split('/').pop() || prefix;
+    try {
+      toast.info('Đang xóa thư mục...', folderName);
+
+      const res = await fetch('/api/folders', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        },
+        body: JSON.stringify({ prefix }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err?.error || 'Xóa thư mục thất bại');
+      }
+
+      // Loại bỏ thư mục khỏi prefixes hiện tại mà KHÔNG reload cả thư mục
+      const norm = prefix.replace(/^\/+|\/+$/g, '') + '/';
+      const remainingPrefixes = get().prefixes.filter((p: string) => {
+        const np = p.replace(/^\/+|\/+$/g, '') + '/';
+        return np !== norm;
+      });
+      const remainingSelected = get().selectedKeys.filter((k) => {
+        const nk = k.replace(/^\/+|\/+$/g, '') + '/';
+        return nk !== norm;
+      });
+      set({ prefixes: remainingPrefixes, selectedKeys: remainingSelected });
+
+      invalidateFolderCache(prefix);
+      toast.success('Đã xóa thư mục', `Thư mục "${folderName}" đã được xóa`);
+    } catch (err: any) {
+      toast.error('Xóa thư mục thất bại', err?.message || 'Không thể xóa thư mục');
     }
-    await get().fetchObjects();
   },
 
   bulkDownload: async () => {
     const keys = get().selectedKeys;
-    if (keys.length === 0) return;
-    const res = await fetch('/api/download', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-      body: JSON.stringify({ keys }),
-    });
-    const { links } = (await res.json()) as { links?: string[] };
-    (links || []).forEach((url: string) => {
-      const a = document.createElement('a');
-      a.href = url;
-      a.rel = 'noopener';
-      a.download = '';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    });
+    const fileKeys = keys.filter((k) => !k.endsWith('/'));
+    if (fileKeys.length === 0) {
+      if (keys.length > 0) {
+        toast.info('Tải về', 'Chỉ hỗ trợ tải về trực tiếp đối với file');
+      }
+      return;
+    }
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        },
+        body: JSON.stringify({ keys: fileKeys }),
+      });
+      const { links } = (await res.json()) as { links?: string[] };
+      (links || []).forEach((url: string) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.rel = 'noopener';
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+      toast.info('Downloading', `Starting download for ${fileKeys.length} file(s)`);
+    } catch (err: any) {
+      toast.error('Download failed', err?.message);
+    }
   },
 
   bulkCopyLinks: async () => {
     const keys = get().selectedKeys;
-    if (keys.length === 0) return;
-    const res = await fetch('/api/download', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-      },
-      body: JSON.stringify({ keys }),
-    });
-    const { links } = (await res.json()) as { links?: string[] };
-    set({ linksModalOpen: true, modalLinks: links || [] });
+    const fileKeys = keys.filter((k) => !k.endsWith('/'));
+    if (fileKeys.length === 0) {
+      if (keys.length > 0) {
+        toast.info('Sao chép link', 'Chỉ hỗ trợ sao chép public link đối với file');
+      }
+      return;
+    }
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+        },
+        body: JSON.stringify({ keys: fileKeys }),
+      });
+      const { links } = (await res.json()) as { links?: string[] };
+      set({ linksModalOpen: true, modalLinks: links || [] });
+      toast.success('Links ready', `${(links || []).length} public link(s) retrieved`);
+    } catch (err: any) {
+      toast.error('Failed to get links', err?.message);
+    }
   },
 }));
 
-// ---- Upload helpers (module scope, use get()/set()) ----
+async function refreshCurrentPage() {
+  const state = useObjectStore.getState();
+  const term = (state.searchQuery || '').trim().toLowerCase();
+  if (term) {
+    _searchResults = null;
+  } else {
+    invalidateFolderCache(state.currentPrefix);
+  }
+  await state.goToPage(state.page);
+}
 
-type Store = ReturnType<typeof useObjectStore.getState>;
+// ───────────────────────────────────────────────────────────────────────────
+// Upload helpers (hỗ trợ multipart upload cho video/file lớn 2GB - 3GB+)
+// ───────────────────────────────────────────────────────────────────────────
 
-const uploadControllers = new Map<string, XMLHttpRequest>();
+const MULTIPART_THRESHOLD = 20 * 1024 * 1024; // 20 MB: file lớn hơn sẽ dùng multipart
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
+
+interface ActiveUpload {
+  abort: () => void;
+}
+
+const activeUploads = new Map<string, ActiveUpload>();
 const fileBlobs = new Map<string, File>();
 
 async function enqueueUploads(entries: { file: File; relativePath: string }[], dirPaths?: string[]) {
@@ -342,14 +736,12 @@ async function enqueueUploads(entries: { file: File; relativePath: string }[], d
   const normalizedBase = (currentPrefix || '').replace(/^\/+|\/+$/g, '');
   const base = normalizedBase ? normalizedBase + '/' : '';
 
-  // Compute intended keys
   let tasks: UploadTask[] = entries.map(({ file, relativePath }) => {
     const rel = String(relativePath || file.name).replace(/^\/+/, '');
     const key = base + rel.replace(/\\/g, '/');
     return { key, name: rel, size: file.size, progress: 0, status: 'queued' as UploadStatus };
   });
 
-  // Collision check
   const existsMap = await checkExists(tasks.map((t) => t.key));
   const collisions = tasks.filter((t) => existsMap[t.key]);
   if (collisions.length) {
@@ -369,14 +761,11 @@ async function enqueueUploads(entries: { file: File; relativePath: string }[], d
         used.add(k);
         return { ...t, key: k };
       });
-    } else {
-      // overwrite -> nothing to change
     }
   }
 
   if (!tasks.length) return;
 
-  // Stash original files mapped to final task keys
   const byRel = new Map<string, File>();
   for (const { file, relativePath } of entries) {
     const rel = String(relativePath || file.name).replace(/^\/+/, '').replace(/\\/g, '/');
@@ -387,7 +776,7 @@ async function enqueueUploads(entries: { file: File; relativePath: string }[], d
     const f = byRel.get(String(t.name).replace(/\\/g, '/'));
     if (f) {
       fileMap.set(t.key, f);
-      fileBlobs.set(t.key, f); // also cache for retries
+      fileBlobs.set(t.key, f);
     }
   }
 
@@ -395,7 +784,6 @@ async function enqueueUploads(entries: { file: File; relativePath: string }[], d
   useObjectStore.setState({ uploadTasks: [...state.uploadTasks, ...tasks], uploadOpen: true });
   runQueue(fileMap);
 
-  // Create empty directory markers (only for dropped directories with no files)
   if (Array.isArray(dirPaths) && dirPaths.length) {
     const fileKeys = tasks.map((t) => t.key);
     for (const dir of dirPaths) {
@@ -404,7 +792,6 @@ async function enqueueUploads(entries: { file: File; relativePath: string }[], d
       const full = base + rel + '/';
       const hasFile = fileKeys.some((k) => k.startsWith(full));
       if (!hasFile) {
-        // Derive parent and name for API
         const parent = rel.includes('/') ? rel.replace(/\/+[^/]+$/, '/') : '';
         const name = rel.split('/').filter(Boolean).slice(-1)[0];
         try {
@@ -434,11 +821,8 @@ async function checkExists(keys: string[]): Promise<Record<string, boolean>> {
   }
 }
 
-async function promptCollisionChoice(): Promise<{ policy: 'overwrite' | 'skip' | 'rename' }>
-{
-  // Minimal prompt for Phase 1. Could be replaced with a nice modal.
+async function promptCollisionChoice(): Promise<{ policy: 'overwrite' | 'skip' | 'rename' }> {
   const msg = 'Some files already exist. Type one of: overwrite, skip, rename';
-  // eslint-disable-next-line no-alert
   let input = window.prompt(msg) || '';
   input = input.toLowerCase();
   if (input.startsWith('s')) return { policy: 'skip' };
@@ -447,17 +831,23 @@ async function promptCollisionChoice(): Promise<{ policy: 'overwrite' | 'skip' |
 }
 
 function runQueue(fileMap?: Map<string, File>) {
-  const concurrency = 5;
+  const concurrency = 4;
   let active = 0;
 
   const pump = () => {
     const { uploadTasks } = useObjectStore.getState();
     if (!uploadTasks.some((t) => t.status === 'queued' || t.status === 'uploading')) {
-      // done - refresh the grid and store keys of uploaded files for filter
       const doneKeys = uploadTasks.filter((t) => t.status === 'done').map((t) => t.key);
-      const { fetchObjects } = useObjectStore.getState();
+      const { fetchObjects, currentPrefix } = useObjectStore.getState();
       useObjectStore.setState({ recentlyUploadedKeys: doneKeys });
-      fetchObjects();
+
+      // Cập nhật lại cache thư mục khi upload hoàn tất
+      invalidateFolderCache(currentPrefix);
+      fetchObjects(true);
+
+      if (doneKeys.length > 0) {
+        toast.success('Upload complete', `${doneKeys.length} file(s) uploaded successfully`);
+      }
       return;
     }
     while (active < concurrency) {
@@ -471,7 +861,6 @@ function runQueue(fileMap?: Map<string, File>) {
         continue;
       }
       active++;
-      // mark uploading
       useObjectStore.setState((s) => ({
         uploadTasks: s.uploadTasks.map((t) => (t.key === next.key ? { ...t, status: 'uploading' } : t)),
       }));
@@ -488,7 +877,6 @@ function runQueue(fileMap?: Map<string, File>) {
         })
         .finally(() => {
           active--;
-          // tick
           setTimeout(pump, 0);
         });
     }
@@ -496,47 +884,198 @@ function runQueue(fileMap?: Map<string, File>) {
   pump();
 }
 
-function uploadOne(file: File, key: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('key', key);
-    const xhr = new XMLHttpRequest();
-    uploadControllers.set(key, xhr);
-    xhr.open('POST', '/api/uploads/direct');
-    xhr.setRequestHeader('Authorization', `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`);
-    xhr.upload.onprogress = (evt) => {
-      if (!evt.lengthComputable) return;
-      const prog = evt.loaded / Math.max(1, evt.total);
-      useObjectStore.setState((s) => ({
-        uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, progress: prog } : t)),
-      }));
-    };
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === XMLHttpRequest.DONE) {
-        uploadControllers.delete(key);
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+/**
+ * Upload 1 file:
+ * - Nếu file <= 20MB: upload trực tiếp qua /api/uploads/direct
+ * - Nếu file > 20MB (ví dụ video 2GB - 3GB+): tự động dùng S3 Multipart Upload chia nhỏ thành các chunk 10MB
+ */
+async function uploadOne(file: File, key: string): Promise<void> {
+  // File nhỏ: direct upload
+  if (file.size <= MULTIPART_THRESHOLD) {
+    return new Promise<void>((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('key', key);
+      const xhr = new XMLHttpRequest();
+      activeUploads.set(key, { abort: () => xhr.abort() });
+      xhr.open('POST', '/api/uploads/direct');
+      xhr.setRequestHeader('Authorization', `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`);
+      xhr.upload.onprogress = (evt) => {
+        if (!evt.lengthComputable) return;
+        const prog = evt.loaded / Math.max(1, evt.total);
+        useObjectStore.setState((s) => ({
+          uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, progress: prog } : t)),
+        }));
+      };
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          activeUploads.delete(key);
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => {
+        activeUploads.delete(key);
+        reject(new Error('Network error'));
+      };
+      xhr.onabort = () => {
+        activeUploads.delete(key);
+        useObjectStore.setState((s) => ({
+          uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, status: 'canceled' } : t)),
+        }));
+        reject(new Error('aborted'));
+      };
+      xhr.send(form);
+    });
+  }
+
+  // File lớn (>20MB, hỗ trợ video 2GB - 3GB+): S3 Multipart chunked upload
+  let aborted = false;
+  let activeXhr: XMLHttpRequest | null = null;
+  let uploadId = '';
+
+  activeUploads.set(key, {
+    abort: () => {
+      aborted = true;
+      if (activeXhr) activeXhr.abort();
+      if (uploadId) {
+        void fetch('/api/uploads/multipart/abort', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+          },
+          body: JSON.stringify({ key, uploadId }),
+        }).catch(() => {});
       }
-    };
-    xhr.onerror = () => {
-      uploadControllers.delete(key);
-      reject(new Error('Network error'));
-    };
-    xhr.onabort = () => {
-      uploadControllers.delete(key);
       useObjectStore.setState((s) => ({
         uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, status: 'canceled' } : t)),
       }));
-      reject(new Error('aborted'));
-    };
-    xhr.send(form);
+    },
   });
+
+  try {
+    // 1. Khởi tạo Multipart Upload
+    const initRes = await fetch('/api/uploads/multipart/init', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+      body: JSON.stringify({ key, contentType: file.type || 'application/octet-stream' }),
+    });
+
+    if (!initRes.ok) {
+      const err = (await initRes.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err?.error || 'Failed to initiate multipart upload');
+    }
+
+    const initData = (await initRes.json()) as { uploadId: string };
+    uploadId = initData.uploadId;
+    if (aborted) throw new Error('aborted');
+
+    // 2. Upload các chunk tuần tự (10MB mỗi chunk)
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const parts: { PartNumber: number; ETag: string }[] = [];
+    let completedBytes = 0;
+
+    for (let i = 0; i < totalChunks; i++) {
+      if (aborted) throw new Error('aborted');
+
+      const partNumber = i + 1;
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunkBlob = file.slice(start, end);
+      const chunkFile = new File([chunkBlob], file.name, { type: file.type });
+
+      const partResult = await new Promise<{ partNumber: number; etag: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        activeXhr = xhr;
+
+        const formData = new FormData();
+        formData.append('key', key);
+        formData.append('uploadId', uploadId);
+        formData.append('partNumber', String(partNumber));
+        formData.append('chunk', chunkFile);
+
+        xhr.open('POST', '/api/uploads/multipart/part');
+        xhr.setRequestHeader('Authorization', `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`);
+
+        xhr.upload.onprogress = (evt) => {
+          if (!evt.lengthComputable) return;
+          const currentTotalLoaded = completedBytes + evt.loaded;
+          const prog = Math.min(0.99, currentTotalLoaded / file.size);
+          useObjectStore.setState((s) => ({
+            uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, progress: prog } : t)),
+          }));
+        };
+
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.DONE) {
+            activeXhr = null;
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const resJson = JSON.parse(xhr.responseText);
+                resolve(resJson);
+              } catch {
+                reject(new Error('Invalid response from part upload'));
+              }
+            } else {
+              reject(new Error(xhr.responseText || `Part ${partNumber} failed HTTP ${xhr.status}`));
+            }
+          }
+        };
+
+        xhr.onerror = () => {
+          activeXhr = null;
+          reject(new Error(`Network error on part ${partNumber}`));
+        };
+
+        xhr.onabort = () => {
+          activeXhr = null;
+          reject(new Error('aborted'));
+        };
+
+        xhr.send(formData);
+      });
+
+      completedBytes += (end - start);
+      parts.push({ PartNumber: partResult.partNumber, ETag: partResult.etag });
+
+      const prog = Math.min(0.99, completedBytes / file.size);
+      useObjectStore.setState((s) => ({
+        uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, progress: prog } : t)),
+      }));
+    }
+
+    if (aborted) throw new Error('aborted');
+
+    // 3. Hoàn tất Multipart Upload
+    const completeRes = await fetch('/api/uploads/multipart/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+      },
+      body: JSON.stringify({ key, uploadId, parts }),
+    });
+
+    if (!completeRes.ok) {
+      const err = (await completeRes.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err?.error || 'Failed to complete multipart upload');
+    }
+
+    useObjectStore.setState((s) => ({
+      uploadTasks: s.uploadTasks.map((t) => (t.key === key ? { ...t, progress: 1, status: 'done' } : t)),
+    }));
+  } finally {
+    activeUploads.delete(key);
+  }
 }
 
 function abortAll() {
-  uploadControllers.forEach((xhr) => {
-    try { xhr.abort(); } catch {}
+  activeUploads.forEach((item) => {
+    try { item.abort(); } catch {}
   });
-  uploadControllers.clear();
+  activeUploads.clear();
 }

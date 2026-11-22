@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
 
 const IMAGE_EXT = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"];
 const VIDEO_EXT = [".mp4", ".webm", ".mov", ".m4v", ".ogg", ".ogv"];
@@ -61,8 +62,8 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
             const u = thumbBase.replace(/\/$/, "") + "?" + params.toString();
             if (!aborted) setImageUrl(u);
           } else {
-            const link = `${process.env.NEXT_PUBLIC_CLOUDFLARE_BUCKET_URL_PUBLIC}/${currentObject.Key}`;
-            if (!aborted) setImageUrl(link || null);
+            const link = buildPublicUrl(currentObject.Key || "");
+            if (!aborted) setImageUrl(link);
           }
         }
         if (isVid) {
@@ -120,17 +121,17 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
       onClick={close}
     >
       {/* Prev arrow */}
       {hasPrev && (
         <button
           onClick={goPrev}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
           aria-label="Previous"
         >
-          <ChevronLeft className="w-8 h-8" />
+          <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
         </button>
       )}
 
@@ -139,7 +140,7 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
         className="max-w-5xl w-full max-h-[85vh] flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full h-[70vh] bg-black rounded-xl overflow-hidden flex items-center justify-center">
+        <div className="w-full h-[60vh] sm:h-[70vh] bg-black rounded-xl overflow-hidden flex items-center justify-center">
           {loading && <div className="text-white/80">Loading...</div>}
           {!loading && isImage && imageUrl && (
             <img
@@ -167,10 +168,10 @@ export function Lightbox({ orderedKeys, objects }: LightboxProps) {
       {hasNext && (
         <button
           onClick={goNext}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
           aria-label="Next"
         >
-          <ChevronRight className="w-8 h-8" />
+          <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
         </button>
       )}
     </div>

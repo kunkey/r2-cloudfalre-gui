@@ -1,16 +1,13 @@
 import { presignGet } from '@/server/r2';
+import { buildPublicUrl, getPublicBaseUrl } from '@/server/public-url';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   const { keys } = (await request.json()) as { keys: string[] };
 
-  const publicBase = process.env.CLOUDFLARE_BUCKET_URL;
+  const publicBase = getPublicBaseUrl();
   if (publicBase) {
-    const normalizedBase = publicBase.replace(/\/$/, '');
-    const links = (keys as string[]).map((key) => {
-      const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
-      return `${normalizedBase}/${encodedKey}`;
-    });
+    const links = (keys as string[]).map((key) => buildPublicUrl(key, publicBase));
     return NextResponse.json({ mode: 'public', links });
   }
 

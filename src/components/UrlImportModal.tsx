@@ -1,8 +1,12 @@
 "use client";
+
 import { useState } from "react";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
 import { useObjectStore } from "@/hooks/useObjectStore";
+import { buildPublicUrl } from "@/lib/public-url";
+import { toast } from "@/lib/toast";
+import { Link2, Loader2 } from "lucide-react";
 
 export default function UrlImportModal({
   open,
@@ -14,103 +18,92 @@ export default function UrlImportModal({
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const { currentPrefix, fetchObjects, showLinksModal } = useObjectStore();
-  const controller = new AbortController();
 
   if (!open) return null;
 
   return (
     <Modal open={open} onClose={onClose} title="Import file from URL">
-      <input
-        className="w-full border border-black/10 dark:border-white/20 px-3 py-2 rounded mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
-        placeholder="Paste file URL here..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
+      <div className="space-y-4">
+        <p className="text-xs text-gray-500 dark:text-slate-400">
+          Enter direct URL to download and save directly to your Cloudflare R2 bucket.
+        </p>
 
-      <div className="flex justify-end gap-3">
-        <Button
-          variant="secondary"
-          className="rounded-full p-2 bg-gray-500 text-white transition"
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
-        <Button
-          disabled={loading}
-          onClick={async () => {
-            try {
-              if (url == "" || url == null) return;
-              setLoading(true);
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+            <Link2 className="w-4 h-4" />
+          </div>
+          <input
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-black/10 dark:border-white/[0.1] bg-white dark:bg-[#07090e] text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            placeholder="https://example.com/video.mp4"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            autoFocus
+          />
+        </div>
 
-              // 1. Fetch file
-              const res = await fetch("/api/fetch-file", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: JSON.stringify({ url }),
-              });
+        <div className="flex justify-end gap-2.5 pt-2">
+          <Button
+            variant="secondary"
+            className="rounded-xl px-4 py-2 cursor-pointer border border-black/5 dark:border-white/[0.08]"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={loading || !url.trim()}
+            onClick={async () => {
+              try {
+                if (!url.trim()) return;
+                setLoading(true);
 
-              if (!res.ok) throw new Error("Failed to fetch external file");
+                const uploadRes = await fetch("/api/uploads/direct", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
+                  },
+                  body: JSON.stringify({
+                    url: url.trim(),
+                    folder: currentPrefix || "",
+                  }),
+                });
 
-              const blob = await res.blob();
+                if (!uploadRes.ok) {
+                  const err = (await uploadRes.json().catch(() => ({}))) as { error?: string };
+                  throw new Error(err?.error || "Upload failed");
+                }
 
-              // 2. Generate filename
-              const ext = blob.type.split("/")[1] || "bin";
-              const fileName = `import-${Date.now()}.${ext}`;
+                const data = (await uploadRes.json()) as { urls?: string[]; uploaded?: string[] };
 
-              const file = new File([blob], fileName, { type: blob.type });
+                // refresh list and clear cache
+                await fetchObjects(true);
 
-              // 3. Upload to R2
-              const formData = new FormData();
-              const base = currentPrefix || "";
-              const key = `${base}${file.name}`;
+                const links = data.urls && data.urls.length > 0
+                  ? data.urls
+                  : (data.uploaded || []).map((key) => buildPublicUrl(key));
 
-              formData.append("file", file);
-              formData.append("key", key);
-
-              const uploadRes = await fetch("/api/uploads/direct", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: formData,
-              });
-
-              if (!uploadRes.ok) throw new Error("Upload failed");
-
-              // refresh list upload
-              await fetchObjects();
-
-              // 4. Get signed link
-              const linkRes = await fetch('/api/objects/signed-get', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${process.env.NEXT_PUBLIC_APP_PASSWORD}`,
-                },
-                body: JSON.stringify({ key: key }),
-                signal: controller.signal,
-              });
-              if (!linkRes.ok) throw new Error('failed');
-              
-              const data = (await linkRes.json()) as { url?: string };
-              const links = data.url ? [data.url] : [];
-              showLinksModal(links);
-              
-              
-              onClose();
-            } catch (err) {
-              console.error(err);
-            } finally {
-              setLoading(false);
-            }
-          }}
-          className="rounded-full p-2 bg-gray-500 text-white transition"
-        >
-          {loading ? "Processing..." : "Import"}
-        </Button>
+                toast.success("URL Imported", "File imported successfully to your bucket");
+                showLinksModal(links);
+                onClose();
+              } catch (error: any) {
+                console.error("URL Import failed:", error);
+                toast.error("Import failed", error?.message || "Failed to import file from URL");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="rounded-xl px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-medium cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Importing...</span>
+              </span>
+            ) : (
+              "Import"
+            )}
+          </Button>
+        </div>
       </div>
     </Modal>
   );

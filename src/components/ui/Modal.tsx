@@ -37,7 +37,7 @@ export function Modal({ open, title, onClose, children, footer, className }: Mod
             role="dialog"
             aria-modal="true"
             className={cn(
-              'relative z-10 w-[min(92vw,720px)] max-h-[90vh] flex flex-col rounded-2xl bg-white/80 dark:bg-gray-800/90 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-xl',
+              'relative z-10 w-[min(92vw,720px)] max-h-[90vh] flex flex-col rounded-3xl bg-white/90 dark:bg-[#161e31]/95 backdrop-blur-2xl border border-black/10 dark:border-white/[0.08] shadow-2xl shadow-black/60',
               className
             )}
             initial={{ y: 24, opacity: 0 }}

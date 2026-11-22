@@ -1,0 +1,23 @@
+# Template keep-unikeys.txt
+# Mỗi dòng = 1 unikey (không có Images/Sex/, không có extension)
+# Ví dụ:
+#   Images/Sex/1786148077749964800-nc-2597-xlpro2qwspfg.jpg -> nc-2597-xlpro2qwspfg
+#   Images/Sex/DLDSS-034.jpg                       -> DLDSS-034
+#   Images/Sex/pasted-1774125199252.png            -> pasted-1774125199252
+# XÓA dòng mẫu, chỉ giữ lại unikey THẬT của bạn
+
+DLDSS-034
+DLDSS-056
+DLDSS-057
+DLDSS-136
+DLDSS-342
+DLDSS-361
+DLDSS-498
+DLDSS-499
+DLDSS-504
+DLDSS-510
+005b4b05ac054ae2bb0bac5cee99e1a1
+00633a1b05440f64397d494f58c435c2
+006baaccc0f34323a3aa39d4d4c68fa0
+0075c832efb54e5180061476dd168826
+0087340f822d4fc58b7b192e74189988
